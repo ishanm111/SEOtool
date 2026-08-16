@@ -38,3 +38,6 @@ next-env.d.ts
 *.log
 .vscode/
 .idea/
+
+# Working handoff notes — reference the pilot client by name
+HANDOFF.md
