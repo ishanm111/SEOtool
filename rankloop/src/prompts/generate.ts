@@ -194,14 +194,53 @@ function localServicePrompts(client: Client, locations: ClientLocation[]): Gener
 
 // ── ecommerce ───────────────────────────────────────────────────────────────
 
-/** Strips variant noise so a product title reads as a category a person would type. */
+/**
+ * Strips variant noise so a product title reads as a category a person would type.
+ *
+ * The noise differs by trade — apparel repeats gender and colourway, homeware
+ * repeats size and pack count, consumables repeat volume — so all three are
+ * stripped rather than assuming which kind of store this is. A word that does
+ * not apply simply never matches.
+ */
 function productCategory(offering: string): string {
   return offering
-    .replace(/\b(mens|womens|men|women|kids|unisex)\b/gi, '')
     .replace(/\s*-\s*.*$/, '')
+    // audience and colourway (apparel, accessories)
+    .replace(/\b(mens|womens|men|women|kids|childrens|unisex)\b/gi, '')
     .replace(/\b(black|white|grey|gray|navy|blue|red|green|pink|onyx|natural|new|edition|low|high|mid)\b/gi, '')
+    // size, count and volume (homeware, consumables, hardware)
+    // Bare "s"/"m"/"l" are deliberately absent — too many real words are one letter
+    // in a product name, and stripping them mangles the category.
+    .replace(/\b(xs|xl|xxl|small|medium|large)\b/gi, '')
+    .replace(/\b\d+(\.\d+)?\s?(ml|l|g|kg|oz|lb|cm|mm|in|ft|pack|pk|ct|count|piece|pcs)\b/gi, '')
+    .replace(/\b(pack|set|bundle|refill|starter|kit)\s+of\s+\d+\b/gi, '')
     .replace(/\s+/g, ' ')
     .trim()
+}
+
+/** Nouns that end in "s" while already being singular. */
+const ALREADY_SINGULAR = new Set(['news', 'series', 'species', 'lens', 'glass', 'dress'])
+
+/**
+ * Singularises a category for use in front of another noun.
+ *
+ * Categories arrive plural because that is how a store names a collection, but
+ * nobody types "shoes brands" — attributive nouns go singular in English. Left
+ * plural, the question reads as machine-written to the person reviewing it and,
+ * more importantly, stops matching how the query is actually typed.
+ */
+function attributive(category: string): string {
+  const words = category.split(' ')
+  const last = words[words.length - 1]
+  const lower = last.toLowerCase()
+  if (ALREADY_SINGULAR.has(lower) || !lower.endsWith('s')) return category
+
+  let singular = last
+  if (/[^aeiou]ies$/i.test(last)) singular = last.slice(0, -3) + 'y'
+  else if (/(sse|xe|ze|che|she)s$/i.test(last)) singular = last.slice(0, -2)
+  else if (!/(ss|us|is)$/i.test(last) && last.length >= 4) singular = last.slice(0, -1)
+
+  return [...words.slice(0, -1), singular].join(' ')
 }
 
 /**
@@ -253,9 +292,14 @@ function ecommercePrompts(client: Client): GeneratedPrompt[] {
     })
   }
 
+  /**
+   * Value questions, asked without naming a quality any particular kind of
+   * product has. "Most comfortable" only means something for things you wear;
+   * "worth the money" means something for every store.
+   */
   for (const cat of top.slice(0, 3)) {
     out.push({
-      text: `Most comfortable ${cat} for everyday wear`,
+      text: `Which ${attributive(cat)} brands are actually worth the money?`,
       locationName: null,
       intent: 'discovery',
       persona: 'general',
@@ -282,7 +326,7 @@ function ecommercePrompts(client: Client): GeneratedPrompt[] {
   )
   if (top[0]) {
     out.push({
-      text: `${brand} vs other ${top[0]} brands`,
+      text: `${brand} vs other ${attributive(top[0])} brands`,
       locationName: null,
       intent: 'comparison',
       persona: 'general',
@@ -290,9 +334,15 @@ function ecommercePrompts(client: Client): GeneratedPrompt[] {
     })
   }
 
+  /**
+   * Price intent without naming a figure. A fixed threshold ("under $100") is a
+   * guess about the store's price band — it reads as absurd for a £2 consumable
+   * and as bargain-hunting for a £2,000 one, and either way it measures the
+   * wrong query. Asking what a thing costs works at any price point.
+   */
   for (const cat of top.slice(0, 3)) {
     out.push({
-      text: `Best ${cat} under $100`,
+      text: `How much should I expect to pay for good ${cat}?`,
       locationName: null,
       intent: 'price',
       persona: 'general',
