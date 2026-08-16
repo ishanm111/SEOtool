@@ -1,0 +1,40 @@
+# ── Client data — never committed ────────────────────────────────────────────
+# The tool is generic; the businesses it audits are not. Everything below holds
+# a real company's information: phone numbers, review counts, competitor
+# analysis, and captured AI answers about them.
+rankloop/clients/*.json
+!rankloop/clients/example.json
+rankloop/data.db
+rankloop/data.db-shm
+rankloop/data.db-wal
+rankloop/data-*.db*
+rankloop/screenshots/
+rankloop/reports/
+rankloop/generated/
+plans/PLAN-V1-*.md
+*-ai-visibility-audit.html
+DataForSEO-Decision-Report.html
+
+# ── Credentials and logged-in sessions ───────────────────────────────────────
+# .chrome-profile holds live session cookies for ChatGPT, Gemini and Perplexity.
+# Committing it would hand over those accounts.
+.env
+.env.local
+.env.*.local
+rankloop/.chrome-profile/
+rankloop/.chromium-profile/
+
+# ── Build output and dependencies ────────────────────────────────────────────
+node_modules/
+.next/
+out/
+build/
+dist/
+*.tsbuildinfo
+next-env.d.ts
+
+# ── OS and editor noise ──────────────────────────────────────────────────────
+.DS_Store
+*.log
+.vscode/
+.idea/

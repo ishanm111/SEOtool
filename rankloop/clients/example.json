@@ -1,0 +1,44 @@
+{
+  "_comment": "Shape of a client record. Real ones are gitignored. You should not need to write these by hand — `npm run add-client <url>` produces them from a URL. This exists so the format is documented, and so the backfill script has something to validate against.",
+
+  "name": "Example Repairs",
+  "domain": "example.com",
+  "homepageUrl": "https://example.com/",
+
+  "_businessType": "local_service | ecommerce — decides which questions get asked, which findings apply, and what the report says",
+  "businessType": "local_service",
+
+  "_platform": "wordpress | shopify | webflow | squarespace | wix | custom — decides which ingest adapter reads the site",
+  "platform": "wordpress",
+  "apiBase": "https://example.com/wp-json/wp/v2",
+
+  "_aliases": "Name variants for matching mentions inside AI answers. Generated automatically; businesses spell their own name inconsistently far more often than you would expect.",
+  "aliases": ["example repairs", "example-repairs", "examplerepairs"],
+
+  "_phones": "Every number found on the site. More than one is itself a finding.",
+  "phones": ["555-123-4567"],
+  "primaryPhone": "555-123-4567",
+
+  "_gbp": "Google Business Profile. All null for a business without one, such as an online store.",
+  "gbpUrl": null,
+  "gbpRating": null,
+  "gbpReviewCount": null,
+  "gbpHasWebsite": null,
+  "gbpServiceArea": null,
+
+  "_offerings": "Services for a local business, product categories for a store. Drives question generation and the new pages.",
+  "offerings": ["boiler repair", "boiler installation", "radiator repair"],
+
+  "_wrongGeoTerms": "Places the site mentions that it does NOT serve. Derived per client during onboarding, never hardcoded — this is what catches a site built for the wrong area.",
+  "wrongGeoTerms": [],
+
+  "_locations": "Towns a local business covers. An online store has none.",
+  "locations": [
+    {
+      "name": "Springfield",
+      "region": "Illinois",
+      "metro": "Springfield",
+      "dataforseoLocation": "Springfield,Illinois,United States"
+    }
+  ]
+}

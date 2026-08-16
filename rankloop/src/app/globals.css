@@ -1,0 +1,14 @@
+@import "tailwindcss";
+
+/*
+ * This is an internal operator tool, not a public site. It commits to one look
+ * so screenshots and client screen-shares are consistent — no dark-mode variant.
+ */
+@theme inline {
+  --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+body {
+  font-family: var(--font-sans);
+}
