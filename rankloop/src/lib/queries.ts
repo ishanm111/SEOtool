@@ -47,10 +47,16 @@ export function getOverview(client: Client) {
   const okRuns = runs.filter(isAnswer)
   const named = okRuns.filter((r) => mentionsClient(r.answerText, client)).length
 
+  /**
+   * Counted the same way as the headline. Splitting an ask that produced no
+   * answer away from one that produced a real one has to happen here too, or
+   * the per-engine rows add up to more than the total above them — which reads
+   * as a parser fault rather than as Google declining to show an AI Overview.
+   */
   const byEngine = new Map<string, { engine: string; ok: number; failed: number; named: number }>()
   for (const r of runs) {
     const e = byEngine.get(r.engine) ?? { engine: r.engine, ok: 0, failed: 0, named: 0 }
-    if (r.ok) {
+    if (isAnswer(r)) {
       e.ok++
       if (mentionsClient(r.answerText, client)) e.named++
     } else e.failed++
