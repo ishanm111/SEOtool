@@ -7,6 +7,7 @@ import { renderReport, type ReportData } from '../report/template'
 import { isAnswer, mentionsClient } from '../analysis/parse'
 import { RATING_THRESHOLDS } from '../config'
 import { arg } from '../lib/args'
+import { groupByMarket, marketKeyOf } from '../lib/markets'
 
 const OUT_DIR = path.resolve('reports')
 /** Keeps the file emailable — screenshots are the bulk of the size. */
@@ -70,6 +71,22 @@ function main() {
     e.ok++
     if (mentionsClient(r.answerText, client)) e.named++
     byEngine.set(r.engine, e)
+  }
+
+  /**
+   * Visibility split by trading area. A client with one market gets one row and
+   * the report leaves the table out entirely, so this costs nothing there.
+   */
+  const markets = groupByMarket(locations)
+  const marketKeyByLocation = new Map(locations.map((l) => [l.id, marketKeyOf(l)]))
+  const marketTally = new Map(markets.map((m) => [m.key, { named: 0, total: 0 }]))
+  for (const r of okRuns) {
+    const locationId = promptById.get(r.promptId)?.locationId
+    const key = locationId == null ? undefined : marketKeyByLocation.get(locationId)
+    const row = key ? marketTally.get(key) : undefined
+    if (!row) continue
+    row.total++
+    if (mentionsClient(r.answerText, client)) row.named++
   }
 
   const competitorCounts = new Map<string, number>()
@@ -154,6 +171,12 @@ function main() {
     named,
     totalAnswers: okRuns.length,
     engines: [...byEngine.values()],
+    markets: markets.map((m) => ({
+      label: m.label,
+      named: marketTally.get(m.key)?.named ?? 0,
+      total: marketTally.get(m.key)?.total ?? 0,
+      locations: m.locations.map((l) => l.name),
+    })),
     competitors: [...competitorCounts].sort((a, b) => b[1] - a[1]),
     citedDomains: [...domainCounts].sort((a, b) => b[1] - a[1]).slice(0, 10),
     cityLeaders: locals

@@ -43,14 +43,20 @@ function locationPage(client: Client, location: ClientLocation): { slug: string;
       a: `Yes. We work throughout ${where} and the surrounding area. If you are not sure whether you are in range, call ${phone} and ask.`,
     },
     {
-      q: `How quickly can you come out in ${location.name}?`,
+      q: `How soon can you help in ${location.name}?`,
       a: FILL(`typical response time for ${location.name} — e.g. "Usually the same day, and always within 48 hours."`),
     },
     {
+      /**
+       * The pricing model is not assumed. A call-out fee plus parts is how a
+       * repair trade charges; a fixed price per job, an hourly rate or a quote
+       * after a survey are all just as common, and stating the wrong one is the
+       * same failure as inventing a number.
+       */
       q: `How much does it cost?`,
-      a: `Most jobs are a call-out fee plus parts and labour. Our call-out fee is ${FILL(
-        'call-out fee, e.g. $89',
-      )}, and ${FILL('state whether it is waived if the customer proceeds')}. We give you a fixed price before any work starts.`,
+      a: `${FILL(
+        'how you charge — e.g. a call-out fee plus parts and labour, a fixed price per job, or an hourly rate',
+      )} We give you a price before any work starts.`,
     },
     {
       q: `Do you guarantee your work?`,
@@ -62,7 +68,7 @@ function locationPage(client: Client, location: ClientLocation): { slug: string;
 <p><strong>${client.name} provides ${trade} across ${where}.</strong> Call ${phone} to book. ${FILL(
     'one sentence on availability — e.g. "We usually attend the same day."',
   )}</p>
-<p>Tell us what has gone wrong when you call, and we will give you a time window and a price before we come out.</p>`.trim()
+<p>Tell us what you need when you get in touch, and we will give you a time window and a price before any work starts.</p>`.trim()
 
   const local = `
 <h2>Working across ${where}</h2>
@@ -78,8 +84,8 @@ function locationPage(client: Client, location: ClientLocation): { slug: string;
     .join('\n')}`
 
   const cta = `
-<h2>Book a visit in ${location.name}</h2>
-<p>Call ${phone} or use the contact form. We will confirm a time and a price before attending.</p>`.trim()
+<h2>Book ${trade} in ${location.name}</h2>
+<p>Call ${phone} or use the contact form. We will confirm a time and a price before any work starts.</p>`.trim()
 
   const html = [
     `<h1>${titleCase(trade)} in ${where}</h1>`,
@@ -112,8 +118,15 @@ function buyingGuide(client: Client, category: string): { slug: string; html: st
       a: FILL(`honest price range for ${category}, including what changes the price`),
     },
     {
-      q: `How do I get the size or fit right?`,
-      a: FILL('sizing or fit guidance, and what to do if it is wrong'),
+      // Not "size or fit" — that is only a question for things you wear. Care and
+      // longevity is asked of every category, and it is the answer a store can give
+      // that a marketplace listing cannot.
+      // No "so it lasts" tail: a category can be singular or plural and the
+      // pronoun would have to agree with it.
+      q: `How do I care for ${category}?`,
+      a: FILL(
+        `care, storage or usage guidance for ${category} — and anything that would void the guarantee`,
+      ),
     },
     {
       q: `What is your returns policy?`,

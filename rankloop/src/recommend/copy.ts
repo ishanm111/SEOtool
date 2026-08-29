@@ -67,7 +67,7 @@ function directAnswer(client: Client, location: ClientLocation | null): string {
     : ` Call ${FILL('phone number')} to book.`
 
   return client.businessType === 'ecommerce'
-    ? `${client.name} sells ${offering}. ${FILL('one sentence on what makes the range different — materials, sizing, guarantee')}`
+    ? `${client.name} sells ${offering}. ${FILL('one sentence on what makes the range different — how it is made, what it is made of, or what is guaranteed')}`
     : `${client.name} provides ${offering}${where}, usually ${FILL('typical response time, e.g. "the same day"')}.${phone}`
 }
 

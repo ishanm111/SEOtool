@@ -1,5 +1,5 @@
 import type { Recommendation, RecommendInput, PageRow } from './types'
-import { SUPERLATIVE_PATTERN } from './types'
+import { FILL, SUPERLATIVE_PATTERN } from './types'
 import type { Client, ClientLocation } from '../lib/client'
 
 /**
@@ -73,7 +73,17 @@ function shorten(s: string, max: number): string {
   // Only now fall back to a word-boundary cut.
   const hard = out.slice(0, max)
   const lastSpace = hard.lastIndexOf(' ')
-  return (lastSpace > max * 0.6 ? hard.slice(0, lastSpace) : hard).replace(/[,;:\-–—(\s]+$/, '')
+  const cut = (lastSpace > max * 0.6 ? hard.slice(0, lastSpace) : hard).replace(/[,;:\-–—(\s]+$/, '')
+
+  /**
+   * Never leave half a placeholder behind. A cut that lands inside "[[FILL: …]]"
+   * produces text that no longer reads as a placeholder, so it stops looking
+   * like something a human still has to fill in — which is the one thing the
+   * marker exists to guarantee. Drop the whole placeholder instead.
+   */
+  return cut.includes('[[FILL:') && !cut.trimEnd().endsWith(']]')
+    ? cut.slice(0, cut.lastIndexOf('[[FILL:')).replace(/[,;:\-–—(\s]+$/, '')
+    : cut
 }
 
 /**
@@ -119,12 +129,20 @@ function buildDescription(page: PageRow, client: Client, locations: ClientLocati
   let body: string
   if (isEcom) {
     const subject = page.title.split(/[|–—]/)[0].trim() || page.slug.replace(/[-_]/g, ' ')
+    /**
+     * The fallback used to promise "Free delivery and returns on every order",
+     * which is both a guess about the store and an invented claim — exactly what
+     * the rest of this codebase refuses to do. A meta description is published
+     * text, so it gets a placeholder like everything else.
+     */
     body = firstSentence
       ? `${firstSentence}`
-      : `${titleCase(subject)} from ${client.name}. Free delivery and returns on every order.`
+      : `${titleCase(subject)} from ${client.name}. ${FILL('one line on why this is worth buying')}`
   } else if (offering && loc) {
+    // "Book a technician" assumes a repair trade. Plenty of local businesses
+    // send nobody, or send someone who is not called a technician.
     body = `${titleCase(offering)} across ${loc.name}${loc.region ? `, ${loc.region}` : ''}. ${
-      client.primaryPhone ? `Call ${client.primaryPhone} to book a technician.` : 'Call to book a visit.'
+      client.primaryPhone ? `Call ${client.primaryPhone} to book.` : 'Call to book.'
     }`
   } else if (loc) {
     body = `${client.name} covers ${loc.name}${loc.region ? `, ${loc.region}` : ''}. ${

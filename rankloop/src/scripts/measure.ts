@@ -5,6 +5,7 @@ import { askGoogleViaBrowser } from '../engines/google-browser'
 import { CHAT_ENGINES } from '../engines/chat-engines'
 import { askGoogle } from '../engines/dataforseo'
 import { resolveClient, clientLocations } from '../lib/resolve-client'
+import { groupByMarket, marketKeyOf } from '../lib/markets'
 import { loadEnv } from '../lib/env'
 import { arg, flag } from '../lib/args'
 
@@ -60,6 +61,49 @@ async function main() {
   const metroAnchor = new Map<string, string>()
   for (const l of locations) {
     if (l.metro && !metroAnchor.has(l.metro)) metroAnchor.set(l.metro, l.dataforseoLocation)
+  }
+
+  /**
+   * `--market=` measures one trading area at a time.
+   *
+   * A multi-market client multiplies the core set by the number of markets, and
+   * every prompt is asked of every engine at human pacing. Splitting the run by
+   * market keeps a session to a sane length and means a browser failure late on
+   * costs one market's answers rather than all of them.
+   */
+  const markets = groupByMarket(locations)
+  const marketArg = arg('market')
+  if (marketArg) {
+    const wantedMarkets = marketArg.split(',').map((s) => s.trim().toLowerCase()).filter(Boolean)
+    const matched = markets.filter((m) =>
+      wantedMarkets.some((w) => m.key === w || m.key.includes(w) || m.label.toLowerCase().includes(w)),
+    )
+    if (matched.length === 0) {
+      throw new Error(
+        `no market matches --market=${marketArg}. Markets for this client:\n` +
+          markets.map((m) => `  ${m.label} (${m.locations.map((l) => l.name).join(', ')})`).join('\n'),
+      )
+    }
+    const keep = new Set(matched.map((m) => m.key))
+    const locationInMarket = new Map(locations.map((l) => [l.id, keep.has(marketKeyOf(l))]))
+    const before = prompts.length
+    prompts = prompts.filter((p) => p.locationId != null && locationInMarket.get(p.locationId) === true)
+    console.log(
+      `--market=${marketArg} -> ${matched.map((m) => m.label).join(', ')}: ` +
+        `${prompts.length} of ${before} prompts (${before - prompts.length} skipped)`,
+    )
+    if (prompts.length === 0) throw new Error('that market has no prompts — run `npm run prompts` first')
+  } else if (markets.length > 1) {
+    const counts = new Map(markets.map((m) => [m.key, 0]))
+    for (const p of prompts) {
+      // A prompt can outlive its location being deactivated, so this may miss.
+      const loc = p.locationId == null ? undefined : locationById.get(p.locationId)
+      const key = loc ? marketKeyOf(loc) : undefined
+      if (key && counts.has(key)) counts.set(key, (counts.get(key) ?? 0) + 1)
+    }
+    console.log('markets in this run:')
+    for (const m of markets) console.log(`  ${m.label.padEnd(22)} ${counts.get(m.key)} prompts`)
+    console.log('  (run one at a time with --market="<name>")\n')
   }
 
   /**

@@ -59,6 +59,13 @@ type BarRow = {
   rank: number
 }
 
+export type MarketRate = {
+  label: string
+  named: number
+  total: number
+  locations: string[]
+}
+
 const SEVERITY_ORDER = { critical: 0, high: 1, medium: 2, low: 3 } as const
 
 const list = (items: string[], max = 8) =>
@@ -80,10 +87,13 @@ export function buildFindings(input: {
   paragraphs: ParagraphRow[]
   runs: RunRow[]
   clientMentionRate: { named: number; total: number }
+  /** One row per market, so a business visible in one place and invisible in another reads as two facts. */
+  marketRates?: MarketRate[]
   competitors?: CompetitorRow[]
   competitiveBar?: BarRow[]
 }): NewFinding[] {
   const { client, locations, pages, paragraphs, runs, clientMentionRate } = input
+  const marketRates = input.marketRates ?? []
   const competitors = input.competitors ?? []
   const bar = input.competitiveBar ?? []
   const out: NewFinding[] = []
@@ -270,6 +280,7 @@ export function buildFindings(input: {
   }
 
   // ── 9. Whether the engines actually name the business.
+  const multiMarket = marketRates.length > 1
   if (clientMentionRate.total > 0) {
     const { named, total } = clientMentionRate
     const pct = Math.round((named / total) * 100)
@@ -277,13 +288,59 @@ export function buildFindings(input: {
       targetType: 'offsite',
       category: 'ai-visibility',
       severity: named === 0 ? 'critical' : pct < 25 ? 'high' : 'medium',
-      issue: `${client.name} is named in ${named} of ${total} AI answers (${pct}%).`,
+      issue:
+        `${client.name} is named in ${named} of ${total} AI answers (${pct}%)` +
+        (multiMarket ? ` across all ${marketRates.length} markets combined.` : '.'),
       proposedText:
         named === 0
           ? 'The business is invisible to AI search. Fix the geography first, then the off-site presence, then the on-page work — in that order.'
           : 'Grow the share of answers by adding the missing pages, statistics and FAQ blocks, and by getting cited on the third-party sites the engines already quote.',
       evidence: `${runs.filter((r) => r.ok).length} successful runs across ${new Set(runs.map((r) => r.engine)).size} engines.`,
     })
+  }
+
+  /**
+   * ── 9b. The same question, market by market.
+   *
+   * A combined percentage is the average of contests that have nothing to do
+   * with each other. Two branches a hundred miles apart face different rivals
+   * and a different map pack, and a business can be the top recommendation in
+   * one while being absent from the other. Reported as one number, the strong
+   * market hides the weak one and the client fixes the wrong thing.
+   */
+  if (multiMarket) {
+    for (const m of marketRates.filter((r) => r.total > 0)) {
+      const pct = Math.round((m.named / m.total) * 100)
+      out.push({
+        targetType: 'offsite',
+        category: 'ai-visibility-market',
+        severity: m.named === 0 ? 'critical' : pct < 25 ? 'high' : 'medium',
+        issue: `${client.name} is named in ${m.named} of ${m.total} AI answers about ${m.label} (${pct}%).`,
+        proposedText:
+          m.named === 0
+            ? `The business is invisible to AI search in ${m.label}. This market needs its own location pages, its own Google Business Profile listing and its own reviews — presence in another market does not carry across.`
+            : `Grow the share of ${m.label} answers with pages, statistics and FAQ blocks written for that market specifically, and citations on the third-party sites the engines quote there.`,
+        evidence: `Places measured: ${list(m.locations, 8)}.`,
+      })
+    }
+
+    /**
+     * A market with no answers at all is not a good result — it is a gap in the
+     * measurement, and saying nothing about it would read as "nothing wrong".
+     */
+    const unmeasured = marketRates.filter((r) => r.total === 0)
+    if (unmeasured.length > 0) {
+      out.push({
+        targetType: 'offsite',
+        category: 'unmeasured-market',
+        severity: 'medium',
+        issue: `${unmeasured.length} of the ${marketRates.length} markets served have no AI answers recorded, so their visibility is unknown rather than good.`,
+        proposedText: `Run a measurement pass for ${list(unmeasured.map((m) => m.label), 6)} before drawing any conclusion about those places.`,
+        evidence: unmeasured
+          .map((m) => `${m.label} (${list(m.locations, 4)})`)
+          .join('; '),
+      })
+    }
   }
 
   // ── 10. Google Business Profile. Only meaningful when the business has one.
