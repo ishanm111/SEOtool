@@ -1,10 +1,9 @@
 import 'server-only'
-import Database from 'better-sqlite3'
 import { drizzle } from 'drizzle-orm/better-sqlite3'
+import { openSqlite } from './connect'
 import * as schema from './schema'
 
-const sqlite = new Database(process.env.RANKLOOP_DB ?? 'data.db')
-sqlite.pragma('journal_mode = WAL')
+const sqlite = openSqlite(process.env.RANKLOOP_DB ?? 'data.db')
 
 export const db = drizzle(sqlite, { schema })
 export { schema }
