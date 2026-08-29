@@ -1,6 +1,7 @@
 import path from 'node:path'
 import type { BrowserContext, Page } from 'playwright'
 import type { LocalPackEntry } from './dataforseo'
+import { MIN_ANSWER_CHARS } from '../config'
 
 /**
  * Reads Google's AI Overview and local map pack through a real browser.
@@ -82,8 +83,17 @@ function extractAiOverview(text: string): string {
   const end = after.search(/\n(?:Top |People also ask|Sponsored|Videos|Images|Related searches)/)
   const body = (end > 0 ? after.slice(0, end) : after.slice(0, 1400)).trim()
 
-  // A couple of words is a stray label, not an overview.
-  return body.split(/\s+/).length >= 12 ? body : ''
+  /**
+   * Two independent floors, because the failure they guard against is the one
+   * that matters most here: a fragment stored as an answer is counted as
+   * "asked, and the client was not mentioned", which is a measurement claiming
+   * something it never saw. Google's own furniture reaches this point — a row
+   * reading "∙ Choose area" is in the pilot client's database — so anything
+   * shorter than a real recommendation is treated as no overview at all, which
+   * is what it is.
+   */
+  if (body.split(/\s+/).length < 12) return ''
+  return body.length >= MIN_ANSWER_CHARS ? body : ''
 }
 
 /**

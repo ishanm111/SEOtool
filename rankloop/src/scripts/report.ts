@@ -4,7 +4,7 @@ import { eq, inArray } from 'drizzle-orm'
 import { openDb, schema } from '../db/raw'
 import { resolveClient, clientLocations } from '../lib/resolve-client'
 import { renderReport, type ReportData } from '../report/template'
-import { mentionsClient } from '../analysis/parse'
+import { isAnswer, mentionsClient } from '../analysis/parse'
 import { RATING_THRESHOLDS } from '../config'
 import { arg } from '../lib/args'
 
@@ -61,7 +61,7 @@ function main() {
     .all()
     .filter((r) => r.kind === 'new_page')
 
-  const okRuns = runs.filter((r) => r.ok && r.answerText.trim())
+  const okRuns = runs.filter(isAnswer)
   const named = okRuns.filter((r) => mentionsClient(r.answerText, client)).length
 
   const byEngine = new Map<string, { engine: string; ok: number; named: number }>()

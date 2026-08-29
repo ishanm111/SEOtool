@@ -1,7 +1,7 @@
 import 'server-only'
 import { eq, inArray } from 'drizzle-orm'
 import { db, schema } from '../db'
-import { mentionsClient } from '../analysis/parse'
+import { isAnswer, mentionsClient } from '../analysis/parse'
 import { hydrateClient, type Client } from './client'
 
 /**
@@ -44,7 +44,7 @@ export function getOverview(client: Client) {
   const runIds = runs.map((r) => r.id)
   const findings = db.select().from(schema.findings).where(eq(schema.findings.clientId, client.id)).all()
 
-  const okRuns = runs.filter((r) => r.ok && r.answerText.trim())
+  const okRuns = runs.filter(isAnswer)
   const named = okRuns.filter((r) => mentionsClient(r.answerText, client)).length
 
   const byEngine = new Map<string, { engine: string; ok: number; failed: number; named: number }>()
