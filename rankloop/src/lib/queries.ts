@@ -3,6 +3,7 @@ import { eq, inArray } from 'drizzle-orm'
 import { db, schema } from '../db'
 import { mentionsClient } from '../analysis/parse'
 import { hydrateClient, type Client } from './client'
+import { groupByMarket, marketKeyOf } from './markets'
 
 /**
  * All dashboard reads. Every one is scoped to a single client — nothing here may
@@ -71,6 +72,29 @@ export function getOverview(client: Client) {
   const domains = new Map<string, number>()
   for (const c of citations) domains.set(c.domain, (domains.get(c.domain) ?? 0) + 1)
 
+  /**
+   * Visibility per trading area. A client in one place gets a single row, which
+   * the dashboard hides — the split only says something when there is more than
+   * one contest to lose.
+   */
+  const locations = db
+    .select()
+    .from(schema.locations)
+    .where(eq(schema.locations.clientId, client.id))
+    .all()
+    .filter((l) => l.isActive)
+  const marketKeyByLocation = new Map(locations.map((l) => [l.id, marketKeyOf(l)]))
+  const promptById = new Map(prompts.map((p) => [p.id, p]))
+  const marketTally = new Map(groupByMarket(locations).map((m) => [m.key, { named: 0, total: 0 }]))
+  for (const r of okRuns) {
+    const locationId = promptById.get(r.promptId)?.locationId
+    const key = locationId == null ? undefined : marketKeyByLocation.get(locationId)
+    const row = key ? marketTally.get(key) : undefined
+    if (!row) continue
+    row.total++
+    if (mentionsClient(r.answerText, client)) row.named++
+  }
+
   return {
     named,
     totalAnswers: okRuns.length,
@@ -83,12 +107,13 @@ export function getOverview(client: Client) {
     promptCount: prompts.filter((p) => p.isActive).length,
     wrongGeoPages: pages.filter((p) => p.wrongGeoHits > 0).length,
     wrongGeoHits: pages.reduce((a, p) => a + p.wrongGeoHits, 0),
-    locationCount: db
-      .select()
-      .from(schema.locations)
-      .where(eq(schema.locations.clientId, client.id))
-      .all()
-      .filter((l) => l.isActive).length,
+    locationCount: locations.length,
+    markets: groupByMarket(locations).map((m) => ({
+      label: m.label,
+      places: m.locations.map((l) => l.name),
+      named: marketTally.get(m.key)?.named ?? 0,
+      total: marketTally.get(m.key)?.total ?? 0,
+    })),
     criticalCount: findings.filter((f) => f.severity === 'critical').length,
     findingCount: findings.length,
   }

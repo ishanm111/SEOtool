@@ -81,6 +81,39 @@ export default async function Home() {
         />
       </div>
 
+      {o.markets.length > 1 && (
+        <section className="rounded-lg border border-zinc-200 bg-white p-5">
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-zinc-500">By market</h2>
+          <p className="mt-1 text-sm text-zinc-500">
+            Each area is a separate contest. A combined figure would hide the weaker one.
+          </p>
+          <table className="mt-3 w-full text-sm">
+            <thead className="text-left text-xs uppercase tracking-wide text-zinc-500">
+              <tr>
+                <th className="pb-2">Market</th>
+                <th className="pb-2">Places</th>
+                <th className="pb-2">Named in</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-zinc-100">
+              {o.markets.map((m) => (
+                <tr key={m.label}>
+                  <td className="py-2 font-medium">{m.label}</td>
+                  <td className="py-2 text-zinc-500">{m.places.join(', ')}</td>
+                  <td
+                    className={`py-2 tabular-nums ${
+                      m.total === 0 ? 'text-zinc-500' : m.named === 0 ? 'text-red-600' : 'text-emerald-600'
+                    }`}
+                  >
+                    {m.total === 0 ? 'not measured' : `${m.named}/${m.total}`}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </section>
+      )}
+
       <section className="rounded-lg border border-zinc-200 bg-white p-5">
         <h2 className="text-sm font-semibold uppercase tracking-wide text-zinc-500">By engine</h2>
         {o.engines.length === 0 ? (

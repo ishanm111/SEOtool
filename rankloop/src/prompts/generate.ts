@@ -1,6 +1,7 @@
 import type { Client, ClientLocation } from '../lib/client'
 import { normaliseState } from '../onboard/us-states'
 import { deriveTrade, splitOffering } from '../lib/trade'
+import { groupByMarket, type Market } from '../lib/markets'
 
 /**
  * Writes the questions we ask the AI engines.
@@ -61,8 +62,42 @@ function localServicePrompts(client: Client, locations: ClientLocation[]): Gener
   const action = offerings.find((o) => o.action)?.action ?? 'service'
   const trade = deriveTrade(client)
 
+  /**
+   * One battery of questions per market, not one per client.
+   *
+   * A business with a branch in two places is in two separate contests. Asking
+   * every high-intent question about whichever place happens to be first, and
+   * the rest a single passing question each, measures one market and reports it
+   * as the whole business. Each market therefore gets its own core set — the
+   * questions where an engine actually names a recommendation — anchored on its
+   * own first location.
+   *
+   * The cost is real: core prompts multiply by the number of markets, and every
+   * core prompt is asked of every engine. `measure --market=` runs one market at
+   * a time when that is too long a session.
+   */
+  return groupByMarket(locations).flatMap((market) =>
+    marketPrompts({ market, things, action, trade }),
+  )
+}
+
+/**
+ * The question set for a single market.
+ *
+ * `primary` is the market's anchor — the place the market-wide questions name.
+ * Everything cycles inside the market, so a question about a Texas town is never
+ * anchored to a Virginia one.
+ */
+function marketPrompts(input: {
+  market: Market
+  things: string[]
+  action: string
+  trade: string
+}): GeneratedPrompt[] {
+  const { market, things, action, trade } = input
+  const locations = market.locations
   const out: GeneratedPrompt[] = []
-  const primary = locations[0]
+  const primary = market.anchor
   const secondary = locations.slice(1)
 
   /**

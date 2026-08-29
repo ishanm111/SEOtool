@@ -4,6 +4,7 @@ import { openDb, schema } from '../db/raw'
 import { resolveClient, clientLocations } from '../lib/resolve-client'
 import { generatePrompts } from '../prompts/generate'
 import { flag } from '../lib/args'
+import { groupByMarket, marketLabelOf } from '../lib/markets'
 
 /**
  * Writes the question set for a client.
@@ -38,7 +39,26 @@ async function main() {
 
   console.log(`\n=== ${prompts.length} QUESTIONS FOR ${client.name} (${client.businessType}) ===`)
   console.log(`core subset: ${prompts.filter((p) => p.isCore).length}`)
-  console.log(`by intent: ${[...byIntent].map(([k, v]) => `${k} ${v}`).join(', ')}\n`)
+  console.log(`by intent: ${[...byIntent].map(([k, v]) => `${k} ${v}`).join(', ')}`)
+
+  /**
+   * Coverage per market, printed because it is the thing most worth checking:
+   * a market with no core questions will not be measured at all, and that is
+   * invisible in a flat list of thirty questions.
+   */
+  const markets = groupByMarket(locations)
+  if (markets.length > 1) {
+    const marketOfPlace = new Map(locations.map((l) => [l.name, marketLabelOf(l)]))
+    console.log('by market:')
+    for (const m of markets) {
+      const mine = prompts.filter((p) => p.locationName && marketOfPlace.get(p.locationName) === m.label)
+      console.log(
+        `  ${m.label.padEnd(22)} ${String(mine.length).padStart(3)} questions, ` +
+          `${mine.filter((p) => p.isCore).length} core`,
+      )
+    }
+  }
+  console.log('')
 
   let lastIntent = ''
   for (const p of prompts) {

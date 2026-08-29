@@ -2,7 +2,7 @@ import readline from 'node:readline/promises'
 import { eq } from 'drizzle-orm'
 import { openDb, schema } from '../db/raw'
 import { detectClient, deriveWrongGeoTerms, type Detection } from '../onboard/detect'
-import { stateFromAbbreviation, normaliseState } from '../onboard/us-states'
+import { stateFromAbbreviation, normaliseState, parseTypedPlace } from '../onboard/us-states'
 import { flag } from '../lib/args'
 
 /**
@@ -103,7 +103,12 @@ async function main() {
       if (inArea.length > 0) {
         console.log(`\n${inArea.length} places found in ${servedStates.join('/')}:`)
         console.log(`  ${inArea.map((p) => p.name).join(', ')}`)
-        const keep = (await rl.question('Use these as the service area? [Y/n] or type your own, comma-separated: ')).trim()
+        const keep = (
+          await rl.question(
+            'Use these as the service area? [Y/n] or type your own, comma-separated ' +
+              '(add the state per town when they differ, e.g. "Houston TX, Virginia Beach VA"): ',
+          )
+        ).trim()
         if (keep === '' || /^y(es)?$/i.test(keep)) {
           locations = inArea.map((p) => ({ name: p.name, state: p.state }))
         } else if (!/^n(o)?$/i.test(keep)) {
@@ -111,17 +116,21 @@ async function main() {
             .split(',')
             .map((s) => s.trim())
             .filter(Boolean)
-            .map((name) => ({ name, state: servedStates[0] }))
+            .map((entry) => parseTypedPlace(entry, servedStates[0]))
         }
       } else {
         console.log(`\nNo places found in ${servedStates.join('/')} on the site itself.`)
-        const typed = (await rl.question('Type the towns served, comma-separated (or blank to skip): ')).trim()
+        const typed = (
+          await rl.question(
+            'Type the towns served, comma-separated (add the state per town when they differ, e.g. "Houston TX, Virginia Beach VA"): ',
+          )
+        ).trim()
         if (typed) {
           locations = typed
             .split(',')
             .map((s) => s.trim())
             .filter(Boolean)
-            .map((name) => ({ name, state: servedStates[0] }))
+            .map((entry) => parseTypedPlace(entry, servedStates[0]))
         }
       }
     }

@@ -10,6 +10,7 @@ Point it at a URL. It figures out the rest.
 npm run add-client https://example.com   # detects platform, business type, places, offerings
 npm run ingest                           # reads every page
 npm run prompts                          # writes the questions a customer would ask
+npm run market                           # groups the places served into markets (multi-branch clients)
 npm run login                            # one-time: log into the AI assistants
 npm run measure                          # asks every engine, screenshots every answer
 npm run competitors                      # crawls whoever AI recommends instead
@@ -60,6 +61,33 @@ opinion:
 Two further findings shape the tool: ChatGPT, Copilot and Meta AI retrieve
 through Bing's index rather than Google's, and `llms.txt` is measurably ignored
 by every major crawler.
+
+## Businesses in more than one place
+
+A business with branches in two places is in two separate contests: different
+competitors, a different map pack, a different set of answers. Reported as one
+percentage, a strong market hides a weak one and the owner fixes the wrong thing.
+
+So places are grouped into **markets**, and every measurement splits on them:
+
+- The question set is generated **per market** — each gets its own core subset,
+  anchored on its own town, rather than one town taking every high-intent
+  question and the rest a passing mention.
+- `npm run measure -- --market="Northern Virginia"` runs one market at a time,
+  which keeps a session to a sane length when the core set has multiplied.
+- Findings, the dashboard and the client report all carry a per-market rate
+  alongside the combined one. A market with no answers is reported as
+  *unmeasured*, never as fine.
+
+Markets default to the state, which is right for branches in two states. For two
+metros inside one state, group them by hand — no rule derived from a place name
+can tell Richmond from Northern Virginia:
+
+```bash
+npm run market -- --client=1                                             # show the current grouping
+npm run market -- --client=1 --location=6,7,8 --market="Northern Virginia"
+npm run prompts -- --client=1                                            # regenerate so each market gets its own set
+```
 
 ## The rule that matters most
 

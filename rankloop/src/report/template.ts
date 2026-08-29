@@ -18,6 +18,8 @@ export type ReportData = {
   named: number
   totalAnswers: number
   engines: { engine: string; ok: number; named: number }[]
+  /** One row per trading area. Empty or single-entry for a business in one place. */
+  markets: { label: string; named: number; total: number; locations: string[] }[]
 
   competitors: [string, number][]
   citedDomains: [string, number][]
@@ -215,6 +217,20 @@ export function renderReport(d: ReportData): string {
   <div class="kpi"><div class="k">${d.pageCount}</div><div class="l">Pages audited</div></div>
   <div class="kpi"><div class="k">${d.criticalFindings.length}</div><div class="l">Critical issues found</div></div>
 </div>
+
+${d.markets.length > 1 ? `
+<h2>Market by market</h2>
+<p class="lede">You trade in ${d.markets.length} areas, and each is a separate contest — different competitors, a different map pack, a different set of answers. A single average would hide whichever one is weaker.</p>
+<div class="tbl-scroll"><table>
+  <thead><tr><th>Area</th><th>Places measured</th><th class="num-cell">Named in</th><th class="num-cell">Share</th></tr></thead>
+  <tbody>
+    ${d.markets.map((m) => {
+      const share = m.total > 0 ? `${Math.round((m.named / m.total) * 100)}%` : 'not measured'
+      return `<tr><td>${esc(m.label)}</td><td>${esc(m.locations.slice(0, 6).join(', '))}${m.locations.length > 6 ? ` +${m.locations.length - 6}` : ''}</td><td class="num-cell">${m.total > 0 ? `${m.named} of ${m.total}` : '—'}</td><td class="num-cell">${share}</td></tr>`
+    }).join('\n    ')}
+  </tbody>
+</table></div>
+` : ''}
 
 <h2><span class="num">01</span>Who AI recommends instead</h2>
 <p class="lede">These are the businesses named when a customer asks an AI assistant for help in your area.</p>
