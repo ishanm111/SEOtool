@@ -1,4 +1,3 @@
-import type { Client } from '../../lib/client'
 import { UA } from '../../lib/sitemap'
 import type { IngestAdapter, IngestedPage } from './types'
 

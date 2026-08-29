@@ -1,4 +1,3 @@
-import type { Client } from '../../lib/client'
 import { collectSitemapUrls, get, getJson } from '../../lib/sitemap'
 import type { IngestAdapter, IngestedPage } from './types'
 import { extractPageFromHtml } from './generic'
