@@ -1,4 +1,4 @@
-import type { Recommendation, RecommendInput, PageRow, ParagraphRow } from './types'
+import type { Recommendation, RecommendInput, PageRow } from './types'
 import { FILL, SUPERLATIVE_PATTERN } from './types'
 import type { Client, ClientLocation } from '../lib/client'
 import { readingEase } from '../ingest/score'
