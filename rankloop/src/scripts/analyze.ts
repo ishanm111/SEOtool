@@ -1,7 +1,7 @@
 import { eq, inArray } from 'drizzle-orm'
 import { openDb, schema } from '../db/raw'
 import { resolveClient, clientLocations } from '../lib/resolve-client'
-import { extractMentions, mentionsClient } from '../analysis/parse'
+import { extractMentions, isAnswer, mentionsClient } from '../analysis/parse'
 import { buildFindings } from '../analysis/findings'
 import { JUNK_CITATION_DOMAINS } from '../config'
 
@@ -43,7 +43,7 @@ function main() {
   }
 
   let named = 0
-  const okRuns = runs.filter((r) => r.ok && r.answerText.trim())
+  const okRuns = runs.filter(isAnswer)
   const competitorCounts = new Map<string, number>()
 
   for (const run of okRuns) {

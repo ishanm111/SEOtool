@@ -2,6 +2,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { chromium, type BrowserContext, type Page } from 'playwright'
 import type { ChatEngineConfig, EngineResult } from './types'
+import { MIN_ANSWER_CHARS } from '../config'
 
 /**
  * Which browser binary to drive.
@@ -85,7 +86,7 @@ async function findFirst(page: Page, selectors: string[], timeoutMs = 20000) {
 async function waitForStableAnswer(
   page: Page,
   selectors: string[],
-  { maxWaitMs = 120000, stableForMs = 4000, minChars = 80 } = {},
+  { maxWaitMs = 120000, stableForMs = 4000, minChars = MIN_ANSWER_CHARS } = {},
 ): Promise<string> {
   const deadline = Date.now() + maxWaitMs
   let last = ''
@@ -209,7 +210,7 @@ export async function askChatEngine(
     const screenshotPath = path.join(SHOTS_DIR, `${shotName}.png`)
     await page.screenshot({ path: screenshotPath, fullPage: false }).catch(() => {})
 
-    if (answerText.length < 80) {
+    if (answerText.length < MIN_ANSWER_CHARS) {
       throw new Error(
         `answer too short to be real (${answerText.length} chars: ${JSON.stringify(answerText.slice(0, 40))}) — ` +
           'timed out, blocked, or the selector matched a placeholder',

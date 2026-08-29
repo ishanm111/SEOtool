@@ -1,4 +1,5 @@
 import type { Client } from '../lib/client'
+import { MIN_ANSWER_CHARS } from '../config'
 
 /**
  * Pulls business names out of an AI answer.
@@ -114,6 +115,24 @@ function looksLikeBusinessName(raw: string, vocabulary: string[], requireVocabul
 export function isClientName(name: string, client: Client): boolean {
   const lower = name.toLowerCase()
   return client.aliases.some((a) => lower.includes(a))
+}
+
+/**
+ * Whether a run counts as an AI answer.
+ *
+ * Three call sites had their own copy of `ok && answerText.trim()`, and all
+ * three disagreed with the measurement run about what an answer is. A Google ask
+ * is recorded as successful when it returns organic results, whether or not
+ * Google showed an AI Overview — so an empty answer was dropped from the
+ * denominator in one place and counted as a successful ask in another, and a
+ * scrap of page furniture short enough to be meaningless was counted as a full
+ * answer the client was absent from.
+ *
+ * Absent is not the same as measured-and-not-mentioned. This is the single place
+ * that decides which one a row is.
+ */
+export function isAnswer(run: { ok: boolean; answerText: string }): boolean {
+  return run.ok && run.answerText.trim().length >= MIN_ANSWER_CHARS
 }
 
 export function mentionsClient(text: string, client: Client): boolean {

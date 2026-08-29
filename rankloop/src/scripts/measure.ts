@@ -88,9 +88,16 @@ async function main() {
 
   const context = await openBrowser(flag('headless'))
   const consecutiveFailures = new Map<string, number>()
-  const tally = new Map<string, { ok: number; failed: number; mentioned: number }>()
-  for (const e of engines) tally.set(e.name, { ok: 0, failed: 0, mentioned: 0 })
-  if (useGoogle) tally.set('google_aio', { ok: 0, failed: 0, mentioned: 0 })
+  /**
+   * `noAnswer` counts asks that succeeded without producing an answer to read.
+   * Google is recorded as successful when it returns organic results, whether or
+   * not it showed an AI Overview, and folding those into `ok` made a run report
+   * more answers than the analysis could find — the gap looked like a parser
+   * fault rather than what it is.
+   */
+  const tally = new Map<string, { ok: number; failed: number; noAnswer: number; mentioned: number }>()
+  for (const e of engines) tally.set(e.name, { ok: 0, failed: 0, noAnswer: 0, mentioned: 0 })
+  if (useGoogle) tally.set('google_aio', { ok: 0, failed: 0, noAnswer: 0, mentioned: 0 })
 
   const saveCitations = (runId: number, cites: { url: string; position: number }[]) => {
     if (cites.length === 0) return
@@ -206,6 +213,7 @@ async function main() {
         const stats = tally.get('google_aio')!
         if (g.ok) {
           stats.ok++
+          if (!g.aiOverviewText) stats.noAnswer++
           const named =
             client.aliases.some((a: string) => g.aiOverviewText.toLowerCase().includes(a)) ||
             g.localPack.some((l) => client.aliases.some((a: string) => l.title.toLowerCase().includes(a)))
@@ -236,7 +244,17 @@ async function main() {
 
   console.log('\n=== RESULT ===')
   for (const [name, s] of tally) {
-    console.log(`${name.padEnd(11)} ${s.ok} ok, ${s.failed} failed, client named in ${s.mentioned}/${s.ok}`)
+    const noAnswer = s.noAnswer > 0 ? `, ${s.noAnswer} with no AI Overview shown` : ''
+    console.log(
+      `${name.padEnd(11)} ${s.ok} ok, ${s.failed} failed${noAnswer}, client named in ${s.mentioned}/${s.ok}`,
+    )
+  }
+  const blind = [...tally.values()].reduce((a, s) => a + s.noAnswer, 0)
+  if (blind > 0) {
+    console.log(
+      `\n${blind} asks returned results but no AI Overview. Those are not answers and are not counted as any;` +
+        ' the map pack captured alongside them is still saved.',
+    )
   }
 }
 
