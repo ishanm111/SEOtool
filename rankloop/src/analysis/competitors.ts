@@ -1,5 +1,6 @@
 import * as cheerio from 'cheerio'
 import { splitContent } from '../ingest/split'
+import { isFaqType, isLocalBusinessType } from '../lib/schema-types'
 import { countStats, countSuperlatives, readingEase, wordCount } from '../ingest/score'
 
 /**
@@ -249,8 +250,8 @@ export async function profileCompetitor(
     cityPageCount: cityPages.length,
     cityPages: cityPages.slice(0, 40),
     schemaTypes: types,
-    hasLocalBusiness: types.some((t) => /LocalBusiness|HomeAndConstructionBusiness|Service$/i.test(t)),
-    hasFaqSchema: types.some((t) => /FAQPage|Question/i.test(t)),
+    hasLocalBusiness: types.some(isLocalBusinessType),
+    hasFaqSchema: types.some(isFaqType),
     faqBlockCount: faqBlocks,
     avgReadability: readabilities.length
       ? Math.round((readabilities.reduce((a, b) => a + b, 0) / readabilities.length) * 10) / 10
