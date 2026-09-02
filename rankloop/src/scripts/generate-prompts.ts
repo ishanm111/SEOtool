@@ -48,10 +48,10 @@ async function main() {
    */
   const markets = groupByMarket(locations)
   if (markets.length > 1) {
-    const marketOfPlace = new Map(locations.map((l) => [l.name, marketLabelOf(l)]))
+    const marketOfPlace = new Map(locations.map((l) => [l.id, marketLabelOf(l)]))
     console.log('by market:')
     for (const m of markets) {
-      const mine = prompts.filter((p) => p.locationName && marketOfPlace.get(p.locationName) === m.label)
+      const mine = prompts.filter((p) => p.locationId != null && marketOfPlace.get(p.locationId) === m.label)
       console.log(
         `  ${m.label.padEnd(22)} ${String(mine.length).padStart(3)} questions, ` +
           `${mine.filter((p) => p.isCore).length} core`,
@@ -81,10 +81,33 @@ async function main() {
   const existing = db.select().from(schema.prompts).where(eq(schema.prompts.clientId, client.id)).all()
   const rl = readline.createInterface({ input: process.stdin, output: process.stdout })
 
+  /**
+   * A question is identified by its wording and its place, not by its row id.
+   *
+   * Regenerating a set is mostly idempotent — add a town and twenty-three of
+   * twenty-five questions come back word for word — so matching on the wording
+   * keeps every answer already collected against them attached. That is what
+   * makes a second run a comparison rather than a fresh start.
+   */
+  const keyOf = (text: string, locationId: number | null) =>
+    `${locationId ?? 0}|${text.trim().toLowerCase()}`
+
+  const existingByKey = new Map(existing.map((p) => [keyOf(p.text, p.locationId), p]))
+  const wantedKeys = new Set(prompts.map((p) => keyOf(p.text, p.locationId)))
+
+  const unchanged = prompts.filter((p) => existingByKey.has(keyOf(p.text, p.locationId)))
+  const added = prompts.filter((p) => !existingByKey.has(keyOf(p.text, p.locationId)))
+  const dropped = existing.filter((p) => !wantedKeys.has(keyOf(p.text, p.locationId)))
+
   if (existing.length > 0) {
     console.log(`\n! ${client.name} already has ${existing.length} questions.`)
-    console.log('  Replacing them orphans any measurements already taken against them.')
-    const ok = (await rl.question('Replace them? [y/N] ')).trim()
+    console.log(`  ${unchanged.length} unchanged (their answers are kept), ${added.length} new.`)
+    if (dropped.length > 0) {
+      console.log(
+        `  ${dropped.length} no longer generated — retired, not deleted, so their answers survive.`,
+      )
+    }
+    const ok = (await rl.question('Update the set? [y/N] ')).trim()
     if (!/^y(es)?$/i.test(ok)) {
       rl.close()
       console.log('cancelled — nothing changed')
@@ -100,24 +123,50 @@ async function main() {
   }
   rl.close()
 
-  const locationByName = new Map(locations.map((l) => [l.name, l.id]))
+  /**
+   * Retired rather than deleted.
+   *
+   * Every answer, screenshot and mention points at a prompt row, so deleting one
+   * that has been measured either fails on the foreign key or throws away the
+   * evidence the whole tool exists to collect. Deactivating it takes it out of
+   * every later run while leaving the history readable.
+   */
+  for (const p of dropped) {
+    db.update(schema.prompts)
+      .set({ isActive: false })
+      .where(eq(schema.prompts.id, p.id))
+      .run()
+  }
 
-  db.delete(schema.prompts).where(eq(schema.prompts.clientId, client.id)).run()
-  db.insert(schema.prompts)
-    .values(
-      prompts.map((p) => ({
-        clientId: client.id,
-        locationId: p.locationName ? (locationByName.get(p.locationName) ?? null) : null,
-        text: p.text,
-        intent: p.intent,
-        persona: p.persona,
-        isCore: p.isCore,
-        isActive: true,
-      })),
-    )
-    .run()
+  // Re-activate anything that came back, and pick up a changed intent or core flag.
+  for (const p of unchanged) {
+    const row = existingByKey.get(keyOf(p.text, p.locationId))!
+    db.update(schema.prompts)
+      .set({ intent: p.intent, persona: p.persona, isCore: p.isCore, isActive: true })
+      .where(eq(schema.prompts.id, row.id))
+      .run()
+  }
 
-  console.log(`\nsaved ${prompts.length} questions`)
+  if (added.length > 0) {
+    db.insert(schema.prompts)
+      .values(
+        added.map((p) => ({
+          clientId: client.id,
+          locationId: p.locationId,
+          text: p.text,
+          intent: p.intent,
+          persona: p.persona,
+          isCore: p.isCore,
+          isActive: true,
+        })),
+      )
+      .run()
+  }
+
+  console.log(
+    `\n${prompts.length} questions active — ${added.length} new, ${unchanged.length} kept` +
+      (dropped.length > 0 ? `, ${dropped.length} retired` : ''),
+  )
   console.log('\nnext:')
   console.log(`  npx tsx src/scripts/measure.ts --client=${client.id}`)
 }

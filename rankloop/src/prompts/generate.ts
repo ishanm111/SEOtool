@@ -18,6 +18,14 @@ import { groupByMarket, type Market } from '../lib/markets'
 export type GeneratedPrompt = {
   text: string
   locationName: string | null
+  /**
+   * The place row this question belongs to.
+   *
+   * Place names repeat across states — Richmond VA and Richmond TX are two
+   * markets and one word — so a saved question is filed under the id, never the
+   * name.
+   */
+  locationId: number | null
   intent: string
   persona: 'general' | 'older'
   isCore: boolean
@@ -118,6 +126,7 @@ function marketPrompts(input: {
     out.push({
       text: `My ${thing} stopped working, who can come out today in ${where(loc)}?`,
       locationName: loc.name,
+      locationId: loc.id,
       intent: 'emergency',
       persona: 'general',
       isCore: i < 2,
@@ -126,6 +135,7 @@ function marketPrompts(input: {
   out.push({
     text: `Emergency ${trade} ${whereShort(primary)} same day service`,
     locationName: primary.name,
+    locationId: primary.id,
     intent: 'emergency',
     persona: 'general',
     isCore: true,
@@ -136,6 +146,7 @@ function marketPrompts(input: {
     {
       text: `Best ${trade} company in ${where(primary)}`,
       locationName: primary.name,
+      locationId: primary.id,
       intent: 'comparison',
       persona: 'general',
       isCore: true,
@@ -143,15 +154,26 @@ function marketPrompts(input: {
     {
       text: `Most reliable ${trade} service in ${where(primary)}`,
       locationName: primary.name,
+      locationId: primary.id,
       intent: 'comparison',
       persona: 'general',
       isCore: true,
     },
   )
-  for (const loc of secondary.slice(0, 4)) {
+  /**
+   * Every other place in the market, not a sample of them.
+   *
+   * The other batteries cycle places against the offering list, so a market with
+   * more places than offerings leaves the tail of the list never asked about at
+   * all — and a place with no questions is reported as unmeasured, not as fine.
+   * Comparison is the intent where an engine actually names a recommendation, so
+   * it is the one worth guaranteeing to each of them.
+   */
+  for (const loc of secondary) {
     out.push({
       text: `Recommend ${article(trade)} ${trade} company near ${where(loc)}`,
       locationName: loc.name,
+      locationId: loc.id,
       intent: 'comparison',
       persona: 'general',
       isCore: false,
@@ -160,6 +182,7 @@ function marketPrompts(input: {
   out.push({
     text: `Which ${trade} companies in ${where(primary)} have the best reviews?`,
     locationName: primary.name,
+    locationId: primary.id,
     intent: 'comparison',
     persona: 'general',
     isCore: false,
@@ -171,6 +194,7 @@ function marketPrompts(input: {
     out.push({
       text: `How much does it cost to ${action} a ${thing} in ${where(loc)}?`,
       locationName: loc.name,
+      locationId: loc.id,
       intent: 'price',
       persona: 'general',
       isCore: i === 0,
@@ -179,6 +203,7 @@ function marketPrompts(input: {
   out.push({
     text: `What is a normal call-out fee for ${trade} in ${where(primary)}?`,
     locationName: primary.name,
+    locationId: primary.id,
     intent: 'price',
     persona: 'general',
     isCore: false,
@@ -190,6 +215,7 @@ function marketPrompts(input: {
     out.push({
       text: `${thing} ${action} ${whereShort(loc)}`,
       locationName: loc.name,
+      locationId: loc.id,
       intent: 'service',
       persona: 'general',
       isCore: i < 2,
@@ -202,6 +228,7 @@ function marketPrompts(input: {
     {
       text: `I need someone to come and look at my ${firstThing}, it has stopped working. I live in ${where(primary)}. Who should I call?`,
       locationName: primary.name,
+      locationId: primary.id,
       intent: 'emergency',
       persona: 'older',
       isCore: true,
@@ -209,6 +236,7 @@ function marketPrompts(input: {
     {
       text: `I am not sure who to trust for ${trade} near ${where(primary)}. Can you recommend somebody reliable?`,
       locationName: primary.name,
+      locationId: primary.id,
       intent: 'comparison',
       persona: 'older',
       isCore: true,
@@ -218,6 +246,7 @@ function marketPrompts(input: {
     out.push({
       text: `I am looking for an honest ${trade} company in ${where(secondary[0])} that will not overcharge me.`,
       locationName: secondary[0].name,
+      locationId: secondary[0].id,
       intent: 'comparison',
       persona: 'older',
       isCore: false,
@@ -301,6 +330,7 @@ function ecommercePrompts(client: Client): GeneratedPrompt[] {
     out.push({
       text: `Best ${cat} to buy online`,
       locationName: null,
+      locationId: null,
       intent: 'discovery',
       persona: 'general',
       isCore: i < 3,
@@ -311,6 +341,7 @@ function ecommercePrompts(client: Client): GeneratedPrompt[] {
     out.push({
       text: `Where can I buy good ${cat}?`,
       locationName: null,
+      locationId: null,
       intent: 'where-to-buy',
       persona: 'general',
       isCore: i < 2,
@@ -321,6 +352,7 @@ function ecommercePrompts(client: Client): GeneratedPrompt[] {
     out.push({
       text: `What should I look for when choosing ${cat}?`,
       locationName: null,
+      locationId: null,
       intent: 'problem',
       persona: 'general',
       isCore: i < 2,
@@ -336,6 +368,7 @@ function ecommercePrompts(client: Client): GeneratedPrompt[] {
     out.push({
       text: `Which ${attributive(cat)} brands are actually worth the money?`,
       locationName: null,
+      locationId: null,
       intent: 'discovery',
       persona: 'general',
       isCore: false,
@@ -347,6 +380,7 @@ function ecommercePrompts(client: Client): GeneratedPrompt[] {
     {
       text: `Is ${brand} any good?`,
       locationName: null,
+      locationId: null,
       intent: 'brand',
       persona: 'general',
       isCore: true,
@@ -354,6 +388,7 @@ function ecommercePrompts(client: Client): GeneratedPrompt[] {
     {
       text: `${brand} reviews — is it worth buying from?`,
       locationName: null,
+      locationId: null,
       intent: 'brand',
       persona: 'general',
       isCore: true,
@@ -363,6 +398,7 @@ function ecommercePrompts(client: Client): GeneratedPrompt[] {
     out.push({
       text: `${brand} vs other ${attributive(top[0])} brands`,
       locationName: null,
+      locationId: null,
       intent: 'comparison',
       persona: 'general',
       isCore: true,
@@ -379,6 +415,7 @@ function ecommercePrompts(client: Client): GeneratedPrompt[] {
     out.push({
       text: `How much should I expect to pay for good ${cat}?`,
       locationName: null,
+      locationId: null,
       intent: 'price',
       persona: 'general',
       isCore: false,
