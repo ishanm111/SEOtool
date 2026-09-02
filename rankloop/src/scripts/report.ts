@@ -8,8 +8,10 @@ import { isAnswer, mentionsClient } from '../analysis/parse'
 import { RATING_THRESHOLDS } from '../config'
 import { arg } from '../lib/args'
 import { groupByMarket, marketKeyOf } from '../lib/markets'
+import { hasBusinessSchema } from '../lib/schema-types'
+import { REPORTS_DIR, reportFileFor } from '../lib/report-file'
 
-const OUT_DIR = path.resolve('reports')
+const OUT_DIR = REPORTS_DIR
 /** Keeps the file emailable — screenshots are the bulk of the size. */
 const MAX_EMBEDDED_SCREENSHOTS = 3
 
@@ -112,18 +114,36 @@ function main() {
   const mySchema = new Set<string>()
   for (const p of pages) (JSON.parse(p.schemaTypes || '[]') as string[]).forEach((t) => mySchema.add(t))
 
+  /**
+   * The client's own side of the table, counted rather than assumed.
+   *
+   * Both of these were hardcoded to zero, which reads as a measurement and is
+   * not one: a site with a page per town and an FAQ block on every one of them
+   * was still reported as having neither, and the plan built on that told the
+   * owner to create pages they already had.
+   */
+  const placeSlugs = locations.flatMap((l) => {
+    const n = l.name.toLowerCase()
+    return [n.replace(/\s+/g, '-'), n.replace(/\s+/g, '')]
+  })
+  const myCityPages = placeSlugs.length
+    ? pages.filter((p) => placeSlugs.some((slug) => p.slug.toLowerCase().includes(slug))).length
+    : 0
+  // Counted the same way as a competitor's: a heading phrased as a question.
+  const myFaqBlocks = paragraphs.filter((p) => /\?\s*$/.test(p.heading.trim())).length
+
   const gap: ReportData['gap'] = [
     { label: 'Total pages', client: pages.length, rivals: avg((c) => c.pageCount) },
     {
       label: 'Pages targeting a place you serve',
       note: 'the strongest signal in this data',
-      client: 0,
+      client: myCityPages,
       rivals: avg((c) => c.cityPageCount),
     },
     {
       label: 'FAQ sections',
       note: 'the format AI assistants quote most often',
-      client: 0,
+      client: myFaqBlocks,
       rivals: avg((c) => c.faqBlockCount),
     },
     {
@@ -135,7 +155,7 @@ function main() {
     {
       label: 'Business details in the page code',
       note: 'how search engines confirm what this business is',
-      client: [...mySchema].some((t) => /LocalBusiness|Service$|Product/i.test(t)) ? 'Yes' : 'No',
+      client: hasBusinessSchema([...mySchema], client.businessType) ? 'Yes' : 'No',
       rivals: `${locals.filter((c) => c.hasLocalBusiness).length} of ${locals.length} have it`,
     },
     {
@@ -193,6 +213,9 @@ function main() {
       .map((f) => ({ category: f.category, issue: f.issue, proposedText: f.proposedText })),
     pageCount: pages.length,
     paragraphCount: paragraphs.length,
+    clientRenderedPages: pages.filter((p) => p.renderedWordCount < 50).length,
+    phoneCount: client.phones.length,
+    promptCount: prompts.filter((p) => p.isActive).length,
     wrongGeoPages: pages.filter((p) => p.wrongGeoHits > 0).length,
     wrongGeoHits: pages.reduce((a, p) => a + p.wrongGeoHits, 0),
     gbp: {
@@ -206,8 +229,7 @@ function main() {
   }
 
   fs.mkdirSync(OUT_DIR, { recursive: true })
-  const slug = client.domain.replace(/\W+/g, '-')
-  const file = path.join(OUT_DIR, `${slug}-ai-visibility-audit.html`)
+  const file = reportFileFor(client.domain)
   fs.writeFileSync(file, renderReport(data), 'utf8')
 
   const kb = Math.round(fs.statSync(file).size / 1024)
