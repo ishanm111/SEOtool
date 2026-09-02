@@ -14,6 +14,7 @@ const NAV = [
   { href: '/competitors', label: 'Competitors' },
   { href: '/findings', label: 'Findings' },
   { href: '/generated', label: 'Recommendations' },
+  { href: '/report', label: 'Report' },
   { href: '/pages', label: 'Site audit' },
   { href: '/competitive-bar', label: 'Review bar' },
   { href: '/clients', label: 'Clients' },
