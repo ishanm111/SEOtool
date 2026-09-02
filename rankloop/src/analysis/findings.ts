@@ -1,6 +1,7 @@
 import { RATING_THRESHOLDS } from '../config'
 import type { Client, ClientLocation } from '../lib/client'
 import { hasGoogleProfile } from '../lib/client'
+import { hasBusinessSchema } from '../lib/schema-types'
 
 export type NewFinding = {
   targetType: 'site' | 'page' | 'paragraph' | 'offsite'
@@ -21,6 +22,8 @@ type PageRow = {
   metaDescription: string
   text: string
   wordCount: number
+  /** Words the page served as HTML, before any structured-data fallback. */
+  renderedWordCount?: number
   schemaTypes: string
   pageType: string
   geoRefs: string
@@ -164,14 +167,19 @@ export function buildFindings(input: {
   }
 
   // ── 4. Structured data.
-  const businessSchema = isEcom ? /Product|Offer/i : /LocalBusiness|HomeAndConstructionBusiness|Service/i
+  /**
+   * Subtypes count. A site that marks itself up as `LiquorStore` or `Dentist`
+   * has LocalBusiness markup — schema.org is a hierarchy — and telling its owner
+   * otherwise is both wrong and actively harmful, because the fix on offer
+   * replaces a precise type with a vaguer one.
+   */
   const schemaLabel = isEcom ? 'Product' : 'LocalBusiness or Service'
   // Product markup belongs on product pages. Demanding it of an about page or a
   // category listing would inflate the count and point at the wrong fix.
   const schemaScope = isEcom ? pages.filter((p) => p.pageType === 'product') : pages
   const noBusinessSchema = schemaScope.filter((p) => {
     const types = JSON.parse(p.schemaTypes || '[]') as string[]
-    return !types.some((t) => businessSchema.test(t))
+    return !hasBusinessSchema(types, client.businessType)
   })
   if (noBusinessSchema.length > 0) {
     out.push({
@@ -181,6 +189,30 @@ export function buildFindings(input: {
       issue: `${noBusinessSchema.length} of ${schemaScope.length} ${isEcom ? 'product ' : ''}pages have no ${schemaLabel} structured data. This is one of the strongest signals for being cited in an AI answer.`,
       proposedText: `Add ${schemaLabel} structured data across the site, plus FAQPage markup wherever there is a question-and-answer block.`,
       evidence: list(noBusinessSchema.map((p) => `/${p.slug}`), 10),
+    })
+  }
+
+  /**
+   * Pages whose copy is assembled in the browser.
+   *
+   * This one is reported before anything about wording, because it decides
+   * whether the wording is ever read. ChatGPT, Copilot and Meta AI retrieve
+   * through Bing's index, and an engine that does not run JavaScript sees the
+   * served HTML — which on these pages is an empty container.
+   */
+  const clientRendered = pages.filter((p) => p.renderedWordCount !== undefined && p.renderedWordCount < 50)
+  if (clientRendered.length > 0) {
+    out.push({
+      targetType: 'site',
+      category: 'javascript-only-content',
+      severity: 'critical',
+      issue:
+        `${clientRendered.length} of ${pages.length} pages serve no readable text — the copy is assembled in the browser. ` +
+        `A crawler that does not run JavaScript sees an empty page, so there is nothing to quote and nothing to rank.`,
+      proposedText:
+        'Server-render the copy, or pre-render it at build time, so the words are in the HTML that arrives. ' +
+        'Until then the structured data is the only thing about this business an engine can read.',
+      evidence: list(clientRendered.map((p) => `/${p.slug}`), 10),
     })
   }
 

@@ -1,6 +1,15 @@
 import * as cheerio from 'cheerio'
 import type { BusinessType, Platform } from '../config'
 import { deriveAliases } from '../lib/client'
+import {
+  jsonLdSignals,
+  parseJsonLd,
+  schemaTypesOf,
+  visibleWordCount,
+  type JsonLdNode,
+  type JsonLdSignals,
+} from '../lib/jsonld'
+import { isLocalBusinessType } from '../lib/schema-types'
 import { collectSitemapUrls, get, getJson, linksFromHtml, originOf } from '../lib/sitemap'
 import { US_STATES, normaliseState, stateFromAbbreviation } from './us-states'
 
@@ -64,37 +73,12 @@ async function detectPlatform(
 
 // ── structured data ─────────────────────────────────────────────────────────
 
-type JsonLdNode = Record<string, unknown>
-
-function jsonLdNodes(html: string): JsonLdNode[] {
-  const $ = cheerio.load(html)
-  const nodes: JsonLdNode[] = []
-  $('script[type="application/ld+json"]').each((_, el) => {
-    try {
-      const walk = (node: unknown) => {
-        if (Array.isArray(node)) return node.forEach(walk)
-        if (node && typeof node === 'object') {
-          nodes.push(node as JsonLdNode)
-          Object.values(node as JsonLdNode).forEach(walk)
-        }
-      }
-      walk(JSON.parse($(el).contents().text()))
-    } catch {
-      // malformed JSON-LD is common in the wild
-    }
-  })
-  return nodes
-}
-
-function typesOf(nodes: JsonLdNode[]): string[] {
-  const types = new Set<string>()
-  for (const n of nodes) {
-    const t = n['@type']
-    if (typeof t === 'string') types.add(t)
-    else if (Array.isArray(t)) t.forEach((x) => typeof x === 'string' && types.add(x))
-  }
-  return [...types].sort()
-}
+/**
+ * JSON-LD parsing lives in `lib/jsonld` because ingestion needs exactly the same
+ * reading of it. A site that states its phone, its service area and its
+ * catalogue only in structured data has to be understood identically whether it
+ * is being onboarded or crawled.
+ */
 
 // ── business type ───────────────────────────────────────────────────────────
 
@@ -103,8 +87,17 @@ function classify(
   urls: string[],
   schemaTypes: string[],
   platform: Platform,
-): { businessType: BusinessType; confidence: string } {
-  const text = html.toLowerCase()
+): { businessType: BusinessType; confidence: string; cityStateMentions: number } {
+  /**
+   * Visible text only. Counting patterns in the raw HTML counts them inside the
+   * JSON-LD and the inline scripts too, which is how the same page could be
+   * classified on "6 City, ST mentions" and then warned about having none: two
+   * different readings of one document, reported as if they were one.
+   */
+  const $ = cheerio.load(html)
+  $('script, style, noscript').remove()
+  const visibleText = $.root().text().replace(/\s+/g, ' ')
+  const text = visibleText.toLowerCase()
   const paths = urls.map((u) => u.toLowerCase())
 
   let ecom = 0
@@ -130,9 +123,7 @@ function classify(
     localWhy.push(why)
   }
 
-  if (schemaTypes.some((t) => /LocalBusiness|HomeAndConstructionBusiness|ProfessionalService/.test(t))) {
-    addL(4, 'LocalBusiness schema')
-  }
+  if (schemaTypes.some(isLocalBusinessType)) addL(4, 'LocalBusiness schema')
   if (schemaTypes.includes('PostalAddress')) addL(2, 'postal address in schema')
   if (/service area|areas we serve|we come to you|serving\s+\w+/i.test(text)) addL(3, 'service-area wording')
   if (/book (?:a|an|now)|schedule (?:a|an|your)|request a quote|free estimate|call for/i.test(text)) {
@@ -140,7 +131,7 @@ function classify(
   }
   if (/\b(?:mon|tue|wed|thu|fri|sat|sun)[a-z]*\s*[-–:]\s*\d/i.test(text)) addL(1, 'opening hours')
   // A "City, ST" pattern in the page text is a strong local signal.
-  const cityState = [...html.matchAll(/\b[A-Z][a-zA-Z.'-]+(?:\s+[A-Z][a-zA-Z.'-]+)?,\s*([A-Z]{2})\b/g)]
+  const cityState = [...visibleText.matchAll(/\b[A-Z][a-zA-Z.'-]+(?:\s+[A-Z][a-zA-Z.'-]+)?,\s*([A-Z]{2})\b/g)]
   if (cityState.length >= 3) addL(3, `${cityState.length} "City, ST" mentions`)
 
   const businessType: BusinessType = ecom > local ? 'ecommerce' : 'local_service'
@@ -149,7 +140,7 @@ function classify(
     `${businessType} (${businessType === 'ecommerce' ? ecom : local} vs ` +
     `${businessType === 'ecommerce' ? local : ecom}) — ${winner.join(', ') || 'no strong signals, defaulted'}`
 
-  return { businessType, confidence }
+  return { businessType, confidence, cityStateMentions: cityState.length }
 }
 
 // ── name, phones ────────────────────────────────────────────────────────────
@@ -487,6 +478,68 @@ function pickSample(urls: string[], count: number): string[] {
   return [...head, ...spread]
 }
 
+
+// ── structured data as a source of truth ────────────────────────────────────
+
+/** One set of signals from every page read, rather than one per page. */
+function mergeSignals(all: JsonLdSignals[]): JsonLdSignals {
+  const merged: JsonLdSignals = {
+    phones: [], places: [], offerings: [], faqs: [], descriptions: [], locality: null, region: null,
+  }
+  for (const s of all) {
+    merged.phones.push(...s.phones)
+    merged.offerings.push(...s.offerings)
+    merged.faqs.push(...s.faqs)
+    merged.descriptions.push(...s.descriptions)
+    merged.locality ??= s.locality
+    merged.region ??= s.region
+    for (const p of s.places) {
+      const seen = merged.places.find((x) => x.name.toLowerCase() === p.name.toLowerCase())
+      if (seen) seen.state ??= p.state
+      else merged.places.push({ ...p })
+    }
+  }
+  merged.phones = [...new Set(merged.phones)]
+  merged.offerings = [...new Set(merged.offerings)]
+  merged.descriptions = [...new Set(merged.descriptions)]
+  return merged
+}
+
+/**
+ * Folds the places a site declares in its markup into the ones read from its
+ * copy.
+ *
+ * `areaServed` is the business stating its own trading area — a stronger source
+ * than a town name that happens to appear in a sentence — but it is only
+ * counted once, so a place written into the copy on every page still outranks it
+ * when the operator picks a primary location.
+ */
+function mergeGeo(
+  fromText: { places: DetectedPlace[]; states: { state: string; mentions: number }[] },
+  signals: JsonLdSignals,
+  businessType: BusinessType,
+): { places: DetectedPlace[]; states: { state: string; mentions: number }[] } {
+  if (businessType !== 'local_service') return fromText
+
+  const places = [...fromText.places]
+  const stateCounts = new Map(fromText.states.map((s) => [s.state, s.mentions]))
+
+  for (const p of signals.places) {
+    if (!p.state) continue
+    const existing = places.find((x) => x.name.toLowerCase() === p.name.toLowerCase())
+    if (existing) continue
+    places.push({ name: p.name, state: p.state, mentions: 1 })
+    stateCounts.set(p.state, (stateCounts.get(p.state) ?? 0) + 1)
+  }
+
+  return {
+    places: places.sort((a, b) => b.mentions - a.mentions),
+    states: [...stateCounts.entries()]
+      .map(([state, mentions]) => ({ state, mentions }))
+      .sort((a, b) => b.mentions - a.mentions),
+  }
+}
+
 // ── main ────────────────────────────────────────────────────────────────────
 
 export async function detectClient(input: string): Promise<Detection> {
@@ -504,9 +557,9 @@ export async function detectClient(input: string): Promise<Detection> {
     warnings.push(`No sitemap found — page list came from homepage links only (${urls.length} URLs), so it is an undercount.`)
   }
 
-  const nodes = jsonLdNodes(html)
-  const schemaTypes = typesOf(nodes)
-  const { businessType, confidence } = classify(html, urls, schemaTypes, platform)
+  const nodes = parseJsonLd(html)
+  const schemaTypes = schemaTypesOf(nodes)
+  const { businessType, confidence, cityStateMentions } = classify(html, urls, schemaTypes, platform)
 
   const candidates = nameCandidates(html, nodes, domain)
   const name = candidates[0]?.value ?? domain
@@ -533,7 +586,17 @@ export async function detectClient(input: string): Promise<Detection> {
       return $$.root().text()
     })
     .join(' ')
-  const phones = extractPhones(allText)
+
+  /**
+   * The structured data on every page read, not just the homepage — a site can
+   * publish its catalogue on one page and its service area on another.
+   */
+  const signals = mergeSignals(documents.map((doc) => jsonLdSignals(parseJsonLd(doc))))
+
+  // Text first: a number shown to customers is the one they call. Anything the
+  // markup declares and the copy never shows is still a real number, so it is
+  // added rather than ignored.
+  const phones = [...new Set([...extractPhones(allText), ...signals.phones])]
 
   /**
    * Geography is only meaningful for a business that travels to customers. An
@@ -544,11 +607,18 @@ export async function detectClient(input: string): Promise<Detection> {
     businessType === 'local_service'
       ? extractPlaces(documents, urls)
       : { places: [], states: [] }
-  const { places, states } = geo
+  const { places, states } = mergeGeo(geo, signals, businessType)
+
   // A store's real categories come from its product feed, not its URLs.
   let offerings =
     platform === 'shopify' ? await shopifyOfferings(origin) : extractOfferings(urls, places, platform, domain)
   if (offerings.length === 0) offerings = extractOfferings(urls, places, platform, domain)
+  /**
+   * A site that renders its copy in the browser has no slugs to read a catalogue
+   * off — one URL, one empty div. What it does publish is an OfferCatalog and a
+   * product list, in the merchant's own category words.
+   */
+  if (offerings.length === 0) offerings = signals.offerings.slice(0, 30)
 
   if (schemaTypes.length === 0) warnings.push('No structured data on the homepage at all.')
   if (phones.length === 0 && businessType === 'local_service') {
@@ -557,8 +627,25 @@ export async function detectClient(input: string): Promise<Detection> {
   if (phones.length > 1) {
     warnings.push(`${phones.length} different phone numbers on the homepage: ${phones.join(', ')}`)
   }
+  /**
+   * Said precisely, because the two sources disagree often and the operator is
+   * about to make a decision on this. A site can carry the service area only in
+   * its markup, only in its copy, or in neither — and "we found nothing" is a
+   * different fact from "the copy shows nothing but the markup does".
+   */
   if (businessType === 'local_service' && places.length === 0) {
-    warnings.push('No "City, ST" pattern found, so the service area could not be read from the site.')
+    warnings.push('No place was found in the page copy or the structured data, so the service area could not be read from the site.')
+  } else if (businessType === 'local_service' && cityStateMentions === 0) {
+    warnings.push(
+      `The page copy never writes a place as "City, ST". The service area was read from the structured data instead: ` +
+        `${places.slice(0, 6).map((p) => p.name).join(', ')}. Confirm it.`,
+    )
+  }
+  if (visibleWordCount(html) < 50) {
+    warnings.push(
+      'The homepage serves almost no readable text — its copy is assembled in the browser. ' +
+        'Search and AI crawlers that do not run JavaScript see what this tool saw: an empty page.',
+    )
   }
   if (states.length > 1) {
     warnings.push(

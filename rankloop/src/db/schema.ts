@@ -91,6 +91,12 @@ export const pages = sqliteTable('pages', {
   metaDescription: text('meta_description').notNull().default(''),
   text: text('text').notNull().default(''),
   wordCount: integer('word_count').notNull().default(0),
+  /**
+   * Words the page actually serves as HTML, before any structured-data
+   * fallback. Zero here with a non-zero wordCount means a page whose copy is
+   * assembled in the browser: what a crawler that does not run JavaScript sees.
+   */
+  renderedWordCount: integer('rendered_word_count').notNull().default(0),
   schemaTypes: text('schema_types').notNull().default('[]'),
   /** page | post | product | collection */
   pageType: text('page_type').notNull().default('page'),
