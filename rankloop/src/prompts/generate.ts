@@ -1,6 +1,6 @@
 import type { Client, ClientLocation } from '../lib/client'
 import { normaliseState } from '../onboard/us-states'
-import { deriveTrade, splitOffering } from '../lib/trade'
+import { deriveTrade, isVisitTrade, splitOffering } from '../lib/trade'
 import { groupByMarket, type Market } from '../lib/markets'
 
 /**
@@ -67,8 +67,18 @@ function localServicePrompts(client: Client, locations: ClientLocation[]): Gener
 
   const offerings = client.offerings.map(splitOffering)
   const things = [...new Set(offerings.map((o) => o.thing))].filter((t) => t.length > 2)
-  const action = offerings.find((o) => o.action)?.action ?? 'service'
+  const action = offerings.find((o) => o.action)?.action ?? null
   const trade = deriveTrade(client)
+
+  /**
+   * Nothing is asked about a business whose trade could not be read off its own
+   * site. The old fallback put the bare word "service" into every question —
+   * "emergency service", "a normal call-out fee for service" — and an engine
+   * answering that is answering about nothing in particular. A measurement taken
+   * with a placeholder in the question is worse than no measurement, because it
+   * arrives with a number attached.
+   */
+  if (!trade || things.length === 0) return []
 
   /**
    * One battery of questions per market, not one per client.
@@ -85,7 +95,15 @@ function localServicePrompts(client: Client, locations: ClientLocation[]): Gener
    * a time when that is too long a session.
    */
   return groupByMarket(locations).flatMap((market) =>
-    marketPrompts({ market, things, action, trade }),
+    /**
+     * A shop and a call-out trade are found through different questions. Nobody
+     * asks who can come out today to fix their tequila, and nobody asks where to
+     * buy a boiler repair. The battery is chosen by what the offerings say the
+     * business does, not by an assumption about local businesses.
+     */
+    action === null && isVisitTrade(trade)
+      ? visitTradePrompts({ market, things, trade })
+      : marketPrompts({ market, things, action: action ?? 'service', trade }),
   )
 }
 
@@ -245,6 +263,138 @@ function marketPrompts(input: {
   if (secondary[0]) {
     out.push({
       text: `I am looking for an honest ${trade} company in ${where(secondary[0])} that will not overcharge me.`,
+      locationName: secondary[0].name,
+      locationId: secondary[0].id,
+      intent: 'comparison',
+      persona: 'older',
+      isCore: false,
+    })
+  }
+
+  return out
+}
+
+
+/**
+ * The question set for a business customers travel to: a shop, a store, a
+ * counter someone walks up to.
+ *
+ * The intents differ from a call-out trade in kind, not just in wording. Nobody
+ * has an emergency about a bottle of tequila, but "open now near me" is the same
+ * urgency in a different shape — and "where can I buy X" is the question an AI
+ * assistant is actually asked about a shop, in place of "who can come out".
+ */
+function visitTradePrompts(input: { market: Market; things: string[]; trade: string }): GeneratedPrompt[] {
+  const { market, things, trade } = input
+  const locations = market.locations
+  const out: GeneratedPrompt[] = []
+  const primary = market.anchor
+  const secondary = locations.slice(1)
+
+  const where = (l: ClientLocation) => `${l.name}${l.region ? ` ${l.region}` : ''}`
+  const whereShort = (l: ClientLocation) => {
+    const abbr = normaliseState(l.region || '')
+    return `${l.name}${abbr ? ` ${abbr}` : ''}`
+  }
+
+  // ── purchase: the highest-intent question asked of a shop
+  for (const [i, thing] of things.slice(0, 4).entries()) {
+    const loc = locations[i % locations.length]
+    out.push({
+      text: `Where can I buy ${thing} in ${where(loc)}?`,
+      locationName: loc.name,
+      locationId: loc.id,
+      intent: 'purchase',
+      persona: 'general',
+      isCore: i < 2,
+    })
+  }
+  out.push({
+    text: `${trade} open now near ${whereShort(primary)}`,
+    locationName: primary.name,
+    locationId: primary.id,
+    intent: 'purchase',
+    persona: 'general',
+    isCore: true,
+  })
+
+  // ── comparison: where an engine actually names a recommendation
+  out.push(
+    {
+      text: `Best ${trade} in ${where(primary)}`,
+      locationName: primary.name,
+      locationId: primary.id,
+      intent: 'comparison',
+      persona: 'general',
+      isCore: true,
+    },
+    {
+      text: `Which ${trade} in ${where(primary)} has the best selection?`,
+      locationName: primary.name,
+      locationId: primary.id,
+      intent: 'comparison',
+      persona: 'general',
+      isCore: true,
+    },
+  )
+  // Every other place in the market, so none goes unasked.
+  for (const loc of secondary) {
+    out.push({
+      text: `Recommend ${article(trade)} ${trade} near ${where(loc)}`,
+      locationName: loc.name,
+      locationId: loc.id,
+      intent: 'comparison',
+      persona: 'general',
+      isCore: false,
+    })
+  }
+  out.push({
+    text: `Which ${trade} in ${where(primary)} has the best reviews?`,
+    locationName: primary.name,
+    locationId: primary.id,
+    intent: 'comparison',
+    persona: 'general',
+    isCore: false,
+  })
+
+  // ── price
+  if (things[0]) {
+    out.push({
+      text: `Where is the cheapest place to buy ${things[0]} in ${where(primary)}?`,
+      locationName: primary.name,
+      locationId: primary.id,
+      intent: 'price',
+      persona: 'general',
+      isCore: false,
+    })
+  }
+
+  // ── keyword-shaped, one per offering: how the query is typed, not spoken
+  for (const [i, thing] of things.slice(0, 6).entries()) {
+    const loc = locations[i % locations.length]
+    out.push({
+      text: `${thing} ${whereShort(loc)}`,
+      locationName: loc.name,
+      locationId: loc.id,
+      intent: 'product',
+      persona: 'general',
+      isCore: i < 2,
+    })
+  }
+
+  // ── older-customer phrasing: longer, conversational, trust-led
+  const firstThing = things[0] ?? trade
+  out.push({
+    text: `I am looking for ${firstThing} near ${where(primary)} and I do not know where to go. Can you recommend somewhere?`,
+    locationName: primary.name,
+    locationId: primary.id,
+    intent: 'comparison',
+    persona: 'older',
+    isCore: true,
+  })
+  if (secondary[0]) {
+    out.push({
+      text: `Is there ${article(trade)} ${trade} near ${where(secondary[0])} where the staff will help me choose?`,
       locationName: secondary[0].name,
       locationId: secondary[0].id,
       intent: 'comparison',

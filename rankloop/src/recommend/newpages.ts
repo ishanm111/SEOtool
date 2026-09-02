@@ -1,7 +1,7 @@
 import type { Recommendation, RecommendInput } from './types'
 import { FILL } from './types'
 import type { Client, ClientLocation } from '../lib/client'
-import { deriveTrade } from '../lib/trade'
+import { deriveTrade, isVisitTrade } from '../lib/trade'
 
 /**
  * Whole pages the site is missing.
@@ -27,13 +27,16 @@ function servicesList(client: Client): string {
   return `<h2>What we ${client.businessType === 'ecommerce' ? 'sell' : 'do'}</h2>\n<ul>\n${items}\n</ul>`
 }
 
-/** A location page for a service business. */
-function locationPage(client: Client, location: ClientLocation): { slug: string; html: string; faqs: { q: string; a: string }[] } {
+/**
+ * A location page for a local business.
+ *
+ * `trade` is passed in rather than derived here: a page cannot be written for a
+ * business whose trade could not be read off its own site, and that decision
+ * belongs at the point where generation is refused.
+ */
+function locationPage(client: Client, location: ClientLocation, trade: string): { slug: string; html: string; faqs: { q: string; a: string }[] } {
   const where = `${location.name}${location.region ? `, ${location.region}` : ''}`
-  // The whole trade, not the first service — a location page has to cover
-  // everything the business does there, or it competes for one query instead of
-  // all of them.
-  const trade = deriveTrade(client)
+  const visit = isVisitTrade(trade)
   const phone = client.primaryPhone ?? FILL('phone number')
   const slug = `${trade.replace(/\s+/g, '-')}-${location.name.toLowerCase().replace(/\s+/g, '-')}`
 
@@ -42,10 +45,15 @@ function locationPage(client: Client, location: ClientLocation): { slug: string;
       q: `Do you cover ${location.name}?`,
       a: `Yes. We work throughout ${where} and the surrounding area. If you are not sure whether you are in range, call ${phone} and ask.`,
     },
-    {
-      q: `How soon can you help in ${location.name}?`,
-      a: FILL(`typical response time for ${location.name} — e.g. "Usually the same day, and always within 48 hours."`),
-    },
+    visit
+      ? {
+          q: `What are your opening hours?`,
+          a: FILL(`the days and hours you are open, and anything customers in ${location.name} should know about parking or access`),
+        }
+      : {
+          q: `How soon can you help in ${location.name}?`,
+          a: FILL(`typical response time for ${location.name} — e.g. "Usually the same day, and always within 48 hours."`),
+        },
     {
       /**
        * The pricing model is not assumed. A call-out fee plus parts is how a
@@ -64,10 +72,16 @@ function locationPage(client: Client, location: ClientLocation): { slug: string;
     },
   ]
 
-  const intro = `
+  const intro = visit
+    ? `
+<p><strong>${client.name} is a ${trade} serving ${where}.</strong> Call ${phone} or come in. ${FILL(
+        'one sentence on what makes the visit worth it — range, staff knowledge, or opening hours',
+      )}</p>
+<p>${FILL(`what customers from ${location.name} most often come in for`)}</p>`.trim()
+    : `
 <p><strong>${client.name} provides ${trade} across ${where}.</strong> Call ${phone} to book. ${FILL(
-    'one sentence on availability — e.g. "We usually attend the same day."',
-  )}</p>
+        'one sentence on availability — e.g. "We usually attend the same day."',
+      )}</p>
 <p>Tell us what you need when you get in touch, and we will give you a time window and a price before any work starts.</p>`.trim()
 
   const local = `
@@ -83,7 +97,11 @@ function locationPage(client: Client, location: ClientLocation): { slug: string;
     .map((f) => `<h3>${f.q}</h3>\n<p>${f.a}</p>`)
     .join('\n')}`
 
-  const cta = `
+  const cta = visit
+    ? `
+<h2>Visit our ${trade} from ${location.name}</h2>
+<p>Call ${phone} with a question, or come in. ${FILL('address and the easiest way to find you from this location')}</p>`.trim()
+    : `
 <h2>Book ${trade} in ${location.name}</h2>
 <p>Call ${phone} or use the contact form. We will confirm a time and a price before any work starts.</p>`.trim()
 
@@ -185,13 +203,22 @@ export function recommendNewPages(input: RecommendInput): Recommendation[] {
   const existingSlugs = genuinePages.map((p) => p.slug.toLowerCase()).join(' ')
   const misleading = pages.filter((p) => p.wrongGeoHits > 0).map((p) => p.slug.toLowerCase())
 
-  if (client.businessType === 'local_service') {
+  const trade = deriveTrade(client)
+
+  /**
+   * No trade, no pages. A location page whose every heading says "service"
+   * because that was the fallback noun is worse than the missing page it
+   * replaces — it publishes a claim about the business that nobody checked.
+   */
+  if (client.businessType === 'local_service' && trade === null) return out
+
+  if (client.businessType === 'local_service' && trade !== null) {
     for (const location of locations) {
       const key = location.name.toLowerCase().replace(/\s+/g, '-')
       if (existingSlugs.includes(key) || existingSlugs.includes(key.replace(/-/g, ''))) continue
       const clash = misleading.find((s) => s.includes(key) || s.includes(key.replace(/-/g, '')))
 
-      const { slug, html, faqs } = locationPage(client, location)
+      const { slug, html, faqs } = locationPage(client, location, trade)
       out.push({
         pageId: null,
         kind: 'new_page',
