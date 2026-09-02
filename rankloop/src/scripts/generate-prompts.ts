@@ -82,6 +82,30 @@ async function main() {
   const rl = readline.createInterface({ input: process.stdin, output: process.stdout })
 
   /**
+   * Same rule as add-client: a question written to a closed stdin must not end
+   * the process quietly with a success code and nothing saved. `--yes` is the
+   * scripted answer; without a terminal and without it, this stops and says so.
+   */
+  const interactive = process.stdin.isTTY === true
+  const assumeYes = flag('yes')
+  const confirm = async (question: string, whenYes: string): Promise<string> => {
+    if (assumeYes) {
+      console.log(`${question}${whenYes}`)
+      return whenYes
+    }
+    if (!interactive) {
+      rl.close()
+      console.error(
+        `\nstdin is not a terminal, so "${question.trim()}" cannot be asked. Nothing was saved.\n` +
+          'Re-run with --yes to answer it, or --dry-run to see the set without saving.',
+      )
+      process.exitCode = 1
+      return ''
+    }
+    return (await rl.question(question)).trim()
+  }
+
+  /**
    * A question is identified by its wording and its place, not by its row id.
    *
    * Regenerating a set is mostly idempotent — add a town and twenty-three of
@@ -107,14 +131,16 @@ async function main() {
         `  ${dropped.length} no longer generated — retired, not deleted, so their answers survive.`,
       )
     }
-    const ok = (await rl.question('Update the set? [y/N] ')).trim()
+    const ok = await confirm('Update the set? [y/N] ', 'y')
+    if (process.exitCode === 1) return
     if (!/^y(es)?$/i.test(ok)) {
       rl.close()
       console.log('cancelled — nothing changed')
       return
     }
   } else {
-    const ok = (await rl.question('\nSave these questions? [Y/n] ')).trim()
+    const ok = await confirm('\nSave these questions? [Y/n] ', 'y')
+    if (process.exitCode === 1) return
     if (/^n(o)?$/i.test(ok)) {
       rl.close()
       console.log('cancelled — nothing saved')
