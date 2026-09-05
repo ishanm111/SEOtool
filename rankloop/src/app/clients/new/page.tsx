@@ -5,6 +5,7 @@ import { useActionState, useState } from 'react'
 import { useFormStatus } from 'react-dom'
 import { inspectSite, saveClient, type OnboardState } from '../../_actions/clients'
 import { QuestionnaireFields } from '../../_components/questionnaire-fields'
+import { TownsField } from '../../_components/towns-field'
 import { questionsFor } from '@/onboard/questionnaire'
 
 /**
@@ -327,18 +328,16 @@ function SaveForm({ state }: { state: Extract<OnboardState, { phase: 'review' }>
           <label htmlFor="towns" className="field-label">
             Towns served
           </label>
-          <textarea
+          <TownsField
             id="towns"
             name="towns"
-            rows={3}
-            className="field"
             defaultValue={keep('towns', draft.towns.join(', '))}
-            placeholder="Houston TX, Pasadena TX"
           />
           <p className="mt-1.5 text-xs text-ink-3">
-            Comma-separated. Add the state after a town when they differ. Each one becomes its own
-            contest — the questions are asked per town, and the results are never averaged across
-            them.
+            Comma-separated, as town names or as ZIP codes — a ZIP is looked up and replaced by its
+            town, because that is what the engines are asked about. Add the state after a town when
+            they differ. Each one becomes its own contest: the questions are asked per town, and
+            the results are never averaged across them.
           </p>
         </div>
       </div>
