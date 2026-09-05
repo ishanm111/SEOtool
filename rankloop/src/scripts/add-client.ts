@@ -3,6 +3,7 @@ import { eq } from 'drizzle-orm'
 import { openDb, schema } from '../db/raw'
 import { detectClient, deriveWrongGeoTerms, type Detection } from '../onboard/detect'
 import { stateFromAbbreviation, normaliseState, parseTypedPlace } from '../onboard/us-states'
+import { expandZipEntries } from '../onboard/zip'
 import { arg, flag } from '../lib/args'
 import { BUSINESS_TYPES, isPlaceBased, type BusinessType } from '../config'
 
@@ -11,7 +12,7 @@ import { BUSINESS_TYPES, isPlaceBased, type BusinessType } from '../config'
  *
  *   npx tsx src/scripts/add-client.ts https://example.com
  *   npx tsx src/scripts/add-client.ts https://example.com --dry-run
- *   npx tsx src/scripts/add-client.ts https://example.com --type=local_retail --states=TX --towns="Pasadena TX" --yes
+ *   npx tsx src/scripts/add-client.ts https://example.com --type=local_retail --states=TX --towns="Pasadena TX, 77002" --yes
  *
  * Detection is confident about some things (platform, page count) and uncertain
  * about others (which places a business genuinely serves). Everything is printed
@@ -151,6 +152,27 @@ async function main() {
   let servedStates: string[] = []
   let locations: { name: string; state: string }[] = []
 
+  /**
+   * A typed service area, which may be given as towns, as ZIP codes, or both.
+   *
+   * ZIPs are resolved to their towns here rather than stored: the questions put
+   * to the engines are asked by place name, and "best plumber in 77002" is not
+   * a question anybody asks. An unresolvable ZIP is dropped and named, never
+   * saved as if it were a town.
+   */
+  const typedPlaces = async (raw: string) => {
+    const entries = raw
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean)
+    const { entries: expanded, resolved, unresolved } = await expandZipEntries(entries)
+    for (const p of resolved) console.log(`  ${p.zip} → ${p.name} ${p.state}`)
+    if (unresolved.length > 0) {
+      console.log(`  no town found for ${unresolved.join(', ')} — skipped, type the town names instead`)
+    }
+    return expanded.map((entry) => parseTypedPlace(entry, servedStates[0]))
+  }
+
   if (isPlaceBased(businessType)) {
     const suggested = d.states[0]?.state ?? ''
     console.log('\nWhich states does this business ACTUALLY serve?')
@@ -168,30 +190,22 @@ async function main() {
         console.log(`  ${inArea.map((p) => p.name).join(', ')}`)
         const keep = await ask(
           'Use these as the service area? [Y/n] or type your own, comma-separated ' +
-            '(add the state per town when they differ, e.g. "Houston TX, Virginia Beach VA"): ',
+            '(towns or ZIP codes; add the state per town when they differ, e.g. "Houston TX, Virginia Beach VA, 77002"): ',
           townsFlag,
         )
         if (keep === '' || /^y(es)?$/i.test(keep)) {
           locations = inArea.map((p) => ({ name: p.name, state: p.state }))
         } else if (!/^n(o)?$/i.test(keep)) {
-          locations = keep
-            .split(',')
-            .map((s) => s.trim())
-            .filter(Boolean)
-            .map((entry) => parseTypedPlace(entry, servedStates[0]))
+          locations = await typedPlaces(keep)
         }
       } else {
         console.log(`\nNo places found in ${servedStates.join('/')} on the site itself.`)
         const typed = await ask(
-          'Type the towns served, comma-separated (add the state per town when they differ, e.g. "Houston TX, Virginia Beach VA"): ',
+          'Type the towns served, comma-separated — towns or ZIP codes (add the state per town when they differ, e.g. "Houston TX, Virginia Beach VA, 77002"): ',
           townsFlag,
         )
         if (typed) {
-          locations = typed
-            .split(',')
-            .map((s) => s.trim())
-            .filter(Boolean)
-            .map((entry) => parseTypedPlace(entry, servedStates[0]))
+          locations = await typedPlaces(typed)
         }
       }
     }

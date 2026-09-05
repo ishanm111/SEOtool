@@ -5,8 +5,11 @@ import { useActionState, useState } from 'react'
 import { useFormStatus } from 'react-dom'
 import { inspectSite, saveClient, type OnboardState } from '../../_actions/clients'
 import { QuestionnaireFields } from '../../_components/questionnaire-fields'
+import { TownsField } from '../../_components/towns-field'
 import { questionsFor } from '@/onboard/questionnaire'
 import { BUSINESS_TYPES, BUSINESS_TYPE_LABELS, type BusinessType } from '@/config'
+import { factsFromProfile } from '@/onboard/gbp-facts'
+import { StatePicker } from '../../_components/state-picker'
 
 /**
  * Adding a client: paste a website, paste a Google listing, confirm what was
@@ -239,6 +242,19 @@ function Review({ state }: { state: Extract<OnboardState, { phase: 'review' }> }
               value={gbp.address ?? gbp.serviceArea ?? (gbp.readListing ? '—' : 'not read')}
             />
             <Fact
+              label="Opening hours"
+              value={
+                gbp.hours ??
+                (gbp.readListing
+                  ? 'not served to an automated read — the warnings below say what was seen'
+                  : 'not read')
+              }
+            />
+            <Fact
+              label="Price bracket"
+              value={gbp.priceLevel ?? (gbp.readListing ? 'none shown' : 'not read')}
+            />
+            <Fact
               label="Website on the listing"
               value={
                 gbp.website ? (
@@ -274,7 +290,16 @@ function Review({ state }: { state: Extract<OnboardState, { phase: 'review' }> }
 }
 
 function SaveForm({ state }: { state: Extract<OnboardState, { phase: 'review' }> }) {
-  const { detection: d, draft } = state
+  const { detection: d, draft, gbp } = state
+
+  /**
+   * Whatever the Google listing already answers, answered.
+   *
+   * Anything typed on a rejected attempt wins over it — an operator who
+   * corrected Google's opening hours and then hit a validation error must not
+   * be handed Google's version back.
+   */
+  const prefilled = factsFromProfile(gbp)
   const [saveState, action] = useActionState<OnboardState, FormData>(saveClient, { phase: 'idle' })
 
   /**
@@ -301,11 +326,6 @@ function SaveForm({ state }: { state: Extract<OnboardState, { phase: 'review' }>
   const [businessType, setBusinessType] = useState<BusinessType>(
     (keep('businessType', draft.businessType) as BusinessType) ?? draft.businessType,
   )
-
-  const statesSeen = d.states
-    .map((s) => `${s.state} (${s.mentions} mentions)`)
-    .join(', ')
-
   return (
     <form action={action} className="card space-y-6 p-6">
       <input type="hidden" name="detection" value={JSON.stringify(d)} />
@@ -364,18 +384,17 @@ function SaveForm({ state }: { state: Extract<OnboardState, { phase: 'review' }>
         </div>
 
         <div className="sm:col-span-2">
-          <label htmlFor="states" className="field-label">
-            States actually served
-          </label>
-          <input
-            id="states"
+          <span className="field-label">States actually served</span>
+          <StatePicker
             name="states"
-            className="field"
             defaultValue={keep('states', draft.states.join(', '))}
-            placeholder="TX, LA"
+            suggestions={d.states}
           />
           <p className="mt-1.5 text-xs text-ink-3">
-            {statesSeen ? `Mentioned on the site: ${statesSeen}.` : 'No states were mentioned on the site.'}
+            Pick every state the business genuinely works in. It decides which place names on the
+            site count as wrong-geography, so a state added here that they do not serve hides a
+            real finding.
+            {d.states.length === 0 && ' No states were mentioned on the site.'}
           </p>
         </div>
 
@@ -383,18 +402,16 @@ function SaveForm({ state }: { state: Extract<OnboardState, { phase: 'review' }>
           <label htmlFor="towns" className="field-label">
             Towns served
           </label>
-          <textarea
+          <TownsField
             id="towns"
             name="towns"
-            rows={3}
-            className="field"
             defaultValue={keep('towns', draft.towns.join(', '))}
-            placeholder="Houston TX, Pasadena TX"
           />
           <p className="mt-1.5 text-xs text-ink-3">
-            Comma-separated. Add the state after a town when they differ. Each one becomes its own
-            contest — the questions are asked per town, and the results are never averaged across
-            them.
+            Comma-separated, as town names or as ZIP codes — a ZIP is looked up and replaced by its
+            town, because that is what the engines are asked about. Add the state after a town when
+            they differ. Each one becomes its own contest: the questions are asked per town, and
+            the results are never averaged across them.
           </p>
         </div>
       </div>
@@ -469,15 +486,27 @@ function SaveForm({ state }: { state: Extract<OnboardState, { phase: 'review' }>
           price, a warranty, a response time or a credential — it writes a visible placeholder
           instead, and a placeholder blocks the change from being published. Most of a fix list
           ends up waiting on the handful of facts below.
+          {Object.keys(prefilled.answers).length > 0 && (
+            <>
+              {' '}
+              {Object.keys(prefilled.answers).length} of them were read off the Google listing and
+              are marked as such — they are still worth a look, because a listing goes out of date
+              like anything else.
+            </>
+          )}
         </p>
         <QuestionnaireFields
           key={`intake-${attemptKey}`}
           groups={questionsFor(businessType)}
-          answers={Object.fromEntries(
-            Object.entries(submitted)
-              .filter(([k]) => k.startsWith('fact_'))
-              .map(([k, v]) => [k.slice('fact_'.length), v]),
-          )}
+          answers={{
+            ...prefilled.answers,
+            ...Object.fromEntries(
+              Object.entries(submitted)
+                .filter(([k]) => k.startsWith('fact_'))
+                .map(([k, v]) => [k.slice('fact_'.length), v]),
+            ),
+          }}
+          sources={prefilled.sources}
         />
       </div>
 

@@ -1,4 +1,5 @@
 import type { QuestionGroup } from '@/onboard/questionnaire'
+import { SuggestingField } from './suggesting-field'
 
 /**
  * The intake questions, rendered as plain fields.
@@ -13,12 +14,28 @@ import type { QuestionGroup } from '@/onboard/questionnaire'
 export function QuestionnaireFields({
   groups,
   answers = {},
+  sources = {},
 }: {
   groups: QuestionGroup[]
   answers?: Record<string, string>
+  /**
+   * Where a prefilled answer came from, by question key.
+   *
+   * Shown next to the field rather than left implicit: a box that filled
+   * itself and said nothing about it is a box nobody checks, and everything
+   * read off a listing is a suggestion until a person confirms it.
+   */
+  sources?: Record<string, string>
 }) {
   return (
     <div className="space-y-8">
+      <p className="text-xs text-ink-3">
+        Several boxes suggest a way of answering as you type. Press{' '}
+        <kbd className="rounded border border-line px-1">Tab</kbd> to take the suggestion; the
+        blanks in it are yours to fill, because nothing the tool has not been told is ever written
+        as a fact.
+      </p>
+
       {groups.map((group) => (
         <fieldset key={group.title}>
           <legend className="display text-base">{group.title}</legend>
@@ -39,7 +56,16 @@ export function QuestionnaireFields({
                     )}
                   </label>
 
-                  {q.kind === 'textarea' ? (
+                  {q.kind !== 'select' && q.frames && q.frames.length > 0 ? (
+                    <SuggestingField
+                      id={id}
+                      name={id}
+                      kind={q.kind}
+                      placeholder={q.placeholder}
+                      defaultValue={value}
+                      suggestions={q.frames}
+                    />
+                  ) : q.kind === 'textarea' ? (
                     <textarea
                       id={id}
                       name={id}
@@ -66,6 +92,12 @@ export function QuestionnaireFields({
                     />
                   )}
 
+                  {sources[q.key] && (
+                    <p className="mt-1.5 text-xs text-sky">
+                      Filled in from what was {sources[q.key]} — check it, and change it if it is
+                      wrong or out of date.
+                    </p>
+                  )}
                   <p className="mt-1.5 text-xs text-ink-3">{q.help}</p>
                   {q.resolves && (
                     <p className="mt-0.5 text-xs text-moss-deep">Answering this fills in {q.resolves}.</p>

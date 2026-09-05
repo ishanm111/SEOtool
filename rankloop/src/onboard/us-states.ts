@@ -65,3 +65,14 @@ export function parseTypedPlace(raw: string, fallbackState: string): { name: str
 
   return { name: trimmed.replace(/,\s*$/, ''), state: fallbackState }
 }
+
+/**
+ * Every state as a pickable option, alphabetically by name.
+ *
+ * The interface offers this list rather than a text box because a mistyped
+ * state is not a typo — it silently changes which place names count as
+ * wrong-geography, and therefore every finding that follows.
+ */
+export const US_STATE_OPTIONS: { abbr: string; name: string }[] = Object.entries(US_STATES)
+  .map(([name, abbr]) => ({ abbr, name: name.replace(/\b\w/g, (c) => c.toUpperCase()) }))
+  .sort((a, b) => a.name.localeCompare(b.name))

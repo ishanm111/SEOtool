@@ -9,6 +9,7 @@ import { detectClient, type Detection } from '@/onboard/detect'
 import { readGoogleProfile, looksLikeGoogleProfile, type GbpReading } from '@/onboard/gbp'
 import { createClient, draftFrom, mergedAliases, type ClientDraft } from '@/onboard/create-client'
 import { BUSINESS_TYPES, isPlaceBased, type BusinessType } from '@/config'
+import { expandZipEntries, type ZipPlace } from '@/onboard/zip'
 import { ACTIVE_CLIENT_COOKIE } from '@/lib/active-client'
 import { saveFacts } from '@/lib/facts'
 import { readAnswers } from '@/lib/read-answers'
@@ -83,7 +84,12 @@ export async function inspectSite(
   // Both reads are slow and independent, so neither waits for the other.
   const [detectionResult, gbpResult] = await Promise.allSettled([
     detectClient(website),
-    profileRaw ? readGoogleProfile(profileRaw) : Promise.resolve(null),
+    /**
+     * The domain is handed over so a share link that lands on Google Search
+     * can still reach the listing: Maps is searched for the name Google
+     * returned, and the result is only used if it links to this site.
+     */
+    profileRaw ? readGoogleProfile(profileRaw, { expectDomain: domain }) : Promise.resolve(null),
   ])
 
   if (detectionResult.status === 'rejected') {
@@ -165,6 +171,22 @@ export async function saveClient(
 
   const name = String(formData.get('name') ?? '').trim()
 
+  /**
+   * ZIP codes become towns before anything is written.
+   *
+   * A service area is frequently given as ZIPs, and a location row reading
+   * "77502" would put "best plumber in 77502" to the engines — a question no
+   * customer asks and no answer names anybody for.
+   */
+  const townEntries = listOf(formData.get('towns'))
+  const towns = await expandZipEntries(townEntries)
+  if (towns.unresolved.length > 0) {
+    return reject(
+      `These ZIP codes could not be looked up: ${towns.unresolved.join(', ')}. ` +
+        'Check them, or type the town names instead — the questions are asked by town name, so a ZIP that cannot be resolved has nothing to ask about.',
+    )
+  }
+
   const draft: ClientDraft = {
     name,
     // Rebuilt here rather than carried through the form, so an operator who
@@ -172,7 +194,7 @@ export async function saveClient(
     aliases: mergedAliases(name || detection.name, detection.aliases),
     businessType,
     states: listOf(formData.get('states')),
-    towns: listOf(formData.get('towns')),
+    towns: towns.entries,
     primaryPhone: String(formData.get('primaryPhone') ?? '').trim() || null,
     gbpUrl: String(formData.get('gbpUrl') ?? '').trim() || null,
     gbpRating: numberOrNull(formData.get('gbpRating')),
@@ -207,4 +229,28 @@ export async function saveClient(
   store.set(ACTIVE_CLIENT_COOKIE, String(clientId), { path: '/', maxAge: 60 * 60 * 24 * 365 })
   revalidatePath('/', 'layout')
   redirect(`/clients?added=${clientId}`)
+}
+
+
+/**
+ * Turns the ZIP codes in a typed service area into towns, while it is typed.
+ *
+ * The same expansion happens on save regardless, but doing it on the spot means
+ * the operator sees "77502 → Pasadena TX" and can correct a wrong ZIP there and
+ * then, rather than finding out from a rejected form after filling in a
+ * questionnaire.
+ */
+export type TownExpansion = {
+  towns: string
+  resolved: ZipPlace[]
+  unresolved: string[]
+}
+
+export async function expandTowns(raw: string): Promise<TownExpansion> {
+  const entries = raw
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean)
+  const { entries: expanded, resolved, unresolved } = await expandZipEntries(entries)
+  return { towns: expanded.join(', '), resolved, unresolved }
 }
