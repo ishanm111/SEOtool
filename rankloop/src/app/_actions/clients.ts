@@ -82,7 +82,12 @@ export async function inspectSite(
   // Both reads are slow and independent, so neither waits for the other.
   const [detectionResult, gbpResult] = await Promise.allSettled([
     detectClient(website),
-    profileRaw ? readGoogleProfile(profileRaw) : Promise.resolve(null),
+    /**
+     * The domain is handed over so a share link that lands on Google Search
+     * can still reach the listing: Maps is searched for the name Google
+     * returned, and the result is only used if it links to this site.
+     */
+    profileRaw ? readGoogleProfile(profileRaw, { expectDomain: domain }) : Promise.resolve(null),
   ])
 
   if (detectionResult.status === 'rejected') {
