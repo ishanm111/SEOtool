@@ -92,11 +92,24 @@ function directAnswer(
     ? ` Call ${client.primaryPhone} to book.`
     : ` Call ${FILL('phone number')} to book.`
 
-  return client.businessType === 'ecommerce'
-    ? `${client.name} sells ${offering}. ${FILL('one sentence on what makes the range different — how it is made, what it is made of, or what is guaranteed')}`
-    : `${client.name} provides ${offering}${where}, usually ${
-        facts.response_time ?? FILL('typical response time, e.g. "the same day"')
-      }.${phone}`
+  /**
+   * Three openings, because the first sentence of a page is the one an engine
+   * quotes. A shop is told where it is and when it is open; a store is told
+   * what makes the range different; a service business is told how fast it
+   * turns up. Handing a liquor store the response-time sentence produced copy
+   * about how quickly they arrive at your house.
+   */
+  if (client.businessType === 'ecommerce') {
+    return `${client.name} sells ${offering}. ${FILL('one sentence on what makes the range different — how it is made, what it is made of, or what is guaranteed')}`
+  }
+  if (client.businessType === 'local_retail') {
+    return `${client.name} sells ${offering}${where}. ${
+      facts.opening_hours ? `Open ${facts.opening_hours}.` : FILL('opening hours')
+    }${phone.replace(' to book.', '.')}`
+  }
+  return `${client.name} provides ${offering}${where}, usually ${
+    facts.response_time ?? FILL('typical response time, e.g. "the same day"')
+  }.${phone}`
 }
 
 function locationFor(page: PageRow, locations: ClientLocation[]): ClientLocation | null {

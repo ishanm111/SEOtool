@@ -2,6 +2,7 @@ import { eq } from 'drizzle-orm'
 import type { openDb } from '../db/raw'
 import * as schema from '../db/schema'
 import { deriveAliases } from '../lib/client'
+import { isPlaceBased, type BusinessType } from '../config'
 import { deriveWrongGeoTerms, type Detection } from './detect'
 import { normaliseState, parseTypedPlace, stateFromAbbreviation } from './us-states'
 import type { GbpReading } from './gbp'
@@ -21,7 +22,7 @@ export type ClientDraft = {
   name: string
   /** The variants an AI answer will be matched against, shown before saving. */
   aliases: string[]
-  businessType: 'local_service' | 'ecommerce'
+  businessType: BusinessType
   /** State abbreviations the business genuinely serves. */
   states: string[]
   /** Towns, typed as "Houston TX" or bare when they share the first state. */
@@ -125,8 +126,12 @@ export function createClient(
 
   const states = draft.states.map((s) => normaliseState(s)).filter((s): s is string => s !== null)
 
+  /**
+   * A shop has locations for the same reason a plumber does: it is found
+   * through a place. Only an online store has none.
+   */
   const locations =
-    draft.businessType === 'local_service'
+    isPlaceBased(draft.businessType)
       ? draft.towns
           .map((t) => t.trim())
           .filter(Boolean)

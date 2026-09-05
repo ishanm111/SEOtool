@@ -1,6 +1,6 @@
 import { RATING_THRESHOLDS } from '../config'
 import type { Client, ClientLocation } from '../lib/client'
-import { hasGoogleProfile } from '../lib/client'
+import { hasGoogleProfile, isPlaceBasedClient, sellsProductsClient } from '../lib/client'
 import { hasBusinessSchema } from '../lib/schema-types'
 
 export type NewFinding = {
@@ -101,8 +101,10 @@ export function buildFindings(input: {
   const bar = input.competitiveBar ?? []
   const out: NewFinding[] = []
   const pageById = new Map(pages.map((p) => [p.id, p]))
-  const isLocal = client.businessType === 'local_service'
-  const isEcom = client.businessType === 'ecommerce'
+  // A shop is both: judged on its place like a plumber and on its products
+  // like a store, so it is asked for both sets of findings rather than half.
+  const isLocal = isPlaceBasedClient(client)
+  const isEcom = sellsProductsClient(client)
 
   // ── 1. Geography: the site points at places the business does not serve.
   const offenders = pages.filter((p) => p.wrongGeoHits > 0)

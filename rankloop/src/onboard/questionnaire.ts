@@ -27,8 +27,15 @@ export type Question = {
   placeholder?: string
   kind: QuestionKind
   options?: { value: string; label: string }[]
-  /** Which business types the question makes sense for. */
-  appliesTo: BusinessType[] | 'both'
+  /**
+   * Which kinds of business the question makes sense for.
+   *
+   * A service business and a shop are asked genuinely different things. Postage
+   * is meaningless to a plumber, a response time is meaningless to a liquor
+   * store, and asking either of them the other's questions is how a
+   * questionnaire stops being answered at all.
+   */
+  appliesTo: BusinessType[] | 'all'
   /** What answering it unblocks. Empty when it only informs the operator. */
   resolves: string
   /**
@@ -48,7 +55,7 @@ export const QUESTIONNAIRE: QuestionGroup[] = [
   {
     title: 'Where and when',
     intro:
-      'Structured data needs a real address or an explicit service area. Without it the engines cannot place the business anywhere.',
+      'Structured data needs a real address or an explicit service area. Without it the engines cannot place the business anywhere — and for a shop, the address is what gets it into the map pack at all.',
     questions: [
       {
         key: 'street_address',
@@ -56,7 +63,7 @@ export const QUESTIONNAIRE: QuestionGroup[] = [
         help: 'Leave blank if the business only travels to customers and has no address a customer could visit.',
         placeholder: '123 Main St',
         kind: 'text',
-        appliesTo: ['local_service'],
+        appliesTo: ['local_service', 'local_retail'],
         resolves: 'the street address in LocalBusiness structured data',
       },
       {
@@ -65,7 +72,7 @@ export const QUESTIONNAIRE: QuestionGroup[] = [
         help: 'Part of the same structured data block. Engines use it to decide which searches a business is local to.',
         placeholder: '77502',
         kind: 'text',
-        appliesTo: ['local_service'],
+        appliesTo: ['local_service', 'local_retail'],
         resolves: 'the postal code in LocalBusiness structured data',
       },
       {
@@ -74,8 +81,17 @@ export const QUESTIONNAIRE: QuestionGroup[] = [
         help: 'Written the way you would say them out loud. "Closed Sunday" is worth stating — it is a question customers ask.',
         placeholder: 'Mon–Fri 8am–6pm, Sat 9am–2pm, closed Sunday',
         kind: 'textarea',
-        appliesTo: 'both',
+        appliesTo: ['local_service', 'local_retail'],
         resolves: 'the opening-hours answer on every new location page',
+      },
+      {
+        key: 'support_hours',
+        label: 'When can a customer reach a person?',
+        help: 'An online store has no opening hours, but it does have a time when somebody answers. It is asked of the engines constantly and almost never on the site.',
+        placeholder: 'Email answered Mon–Fri, usually within a few hours; no phone line',
+        kind: 'textarea',
+        appliesTo: ['ecommerce'],
+        resolves: 'the contact answer on new pages',
       },
       {
         key: 'response_time',
@@ -92,7 +108,7 @@ export const QUESTIONNAIRE: QuestionGroup[] = [
         help: 'Parking, which door to use, a hard-to-find entrance. Only relevant if customers come to you.',
         placeholder: 'Free parking at the rear; entrance is on the side street',
         kind: 'textarea',
-        appliesTo: 'both',
+        appliesTo: ['local_service', 'local_retail'],
         resolves: 'the access note on new location pages',
       },
     ],
@@ -114,7 +130,7 @@ export const QUESTIONNAIRE: QuestionGroup[] = [
           { value: '$$$', label: '$$$ — premium' },
           { value: '$$$$', label: '$$$$ — high end' },
         ],
-        appliesTo: 'both',
+        appliesTo: 'all',
         resolves: 'the price range in structured data',
       },
       {
@@ -123,7 +139,7 @@ export const QUESTIONNAIRE: QuestionGroup[] = [
         help: 'A range is fine, and honest ranges outperform "call for a quote" — it is one of the questions customers ask an AI directly.',
         placeholder: 'Most call-outs land between $120 and $260; the difference is usually the part',
         kind: 'textarea',
-        appliesTo: 'both',
+        appliesTo: 'all',
         resolves: 'the pricing answer on new pages and buying guides',
         mustBeConfirmed: true,
       },
@@ -133,7 +149,7 @@ export const QUESTIONNAIRE: QuestionGroup[] = [
         help: 'Product structured data will not validate without it.',
         placeholder: 'USD',
         kind: 'text',
-        appliesTo: ['ecommerce'],
+        appliesTo: ['ecommerce', 'local_retail'],
         resolves: 'the currency code in Product structured data',
       },
       {
@@ -142,7 +158,7 @@ export const QUESTIONNAIRE: QuestionGroup[] = [
         help: 'In the exact words the business would stand behind. Left blank, every page that would mention one stays blocked.',
         placeholder: '90 days on labour, manufacturer warranty on parts',
         kind: 'textarea',
-        appliesTo: 'both',
+        appliesTo: 'all',
         resolves: 'the warranty answer on new pages',
         mustBeConfirmed: true,
       },
@@ -152,9 +168,38 @@ export const QUESTIONNAIRE: QuestionGroup[] = [
         help: 'What a customer actually gets, including anything that voids it.',
         placeholder: '30 days unworn, in the original box, buyer pays return postage',
         kind: 'textarea',
-        appliesTo: ['ecommerce'],
+        appliesTo: ['ecommerce', 'local_retail'],
         resolves: 'the returns answer on new pages',
         mustBeConfirmed: true,
+      },
+      {
+        key: 'shipping',
+        label: 'Delivery: how long, how much, and where to',
+        help: 'The most asked question about any online store, and the one an engine will answer from a rival\'s site if it cannot find it on yours.',
+        placeholder: '2–4 working days, free over $50, US only',
+        kind: 'textarea',
+        appliesTo: ['ecommerce'],
+        resolves: 'the delivery answer on new pages and in Product structured data',
+        mustBeConfirmed: true,
+      },
+      {
+        key: 'click_and_collect',
+        label: 'Can people order ahead and collect in the shop?',
+        help: 'Say plainly if not. "Can I reserve one and pick it up?" is a question customers put to an engine before they get in the car.',
+        placeholder: 'Call ahead and we will hold it for the day; no online ordering',
+        kind: 'textarea',
+        appliesTo: ['local_retail'],
+        resolves: 'the ordering answer on new pages',
+        mustBeConfirmed: true,
+      },
+      {
+        key: 'brands_carried',
+        label: 'Brands and ranges actually stocked',
+        help: 'People ask an engine where to buy a brand, not where to buy a category. A brand nobody can find on the site cannot be recommended.',
+        placeholder: 'Herradura, Don Julio, most Texas craft beer',
+        kind: 'textarea',
+        appliesTo: ['ecommerce', 'local_retail'],
+        resolves: 'the stocked-brands list on new pages',
       },
     ],
   },
@@ -169,7 +214,7 @@ export const QUESTIONNAIRE: QuestionGroup[] = [
         help: 'Turns "trusted for years" into a number, which is the whole point.',
         placeholder: '2011',
         kind: 'text',
-        appliesTo: 'both',
+        appliesTo: 'all',
         resolves: 'a verifiable fact in place of struck-out superlatives',
       },
       {
@@ -178,7 +223,7 @@ export const QUESTIONNAIRE: QuestionGroup[] = [
         help: 'Anything with a number or an issuing body. Vague trust language is worth nothing; a licence number is worth a lot.',
         placeholder: 'TDLR licence #12345, fully insured, factory-certified for Bosch',
         kind: 'textarea',
-        appliesTo: 'both',
+        appliesTo: 'all',
         resolves: 'credibility claims that would otherwise be blocked',
         mustBeConfirmed: true,
       },
@@ -188,7 +233,7 @@ export const QUESTIONNAIRE: QuestionGroup[] = [
         help: 'Jobs completed, years running, response times, units shipped. Each one is a statistic the engines can quote.',
         placeholder: '4,000 repairs since 2011; 92% fixed on the first visit',
         kind: 'textarea',
-        appliesTo: 'both',
+        appliesTo: 'all',
         resolves: 'statistics in rewritten body copy',
         mustBeConfirmed: true,
       },
@@ -198,7 +243,7 @@ export const QUESTIONNAIRE: QuestionGroup[] = [
         help: 'Services they do not offer, areas they will not travel to, promises they cannot keep. This is a guardrail, not a wish list.',
         placeholder: 'We do not do commercial work, and never claim 24/7',
         kind: 'textarea',
-        appliesTo: 'both',
+        appliesTo: 'all',
         resolves: '',
       },
     ],
@@ -214,7 +259,7 @@ export const QUESTIONNAIRE: QuestionGroup[] = [
         help: 'The two or three that pay best, not the full list. These get weighted in the question set.',
         placeholder: 'Refrigerator repair, same-day washer repair',
         kind: 'textarea',
-        appliesTo: 'both',
+        appliesTo: 'all',
         // Read by the operator when reviewing the generated question set rather
         // than consumed automatically — saying otherwise would overstate it.
         resolves: '',
@@ -225,7 +270,7 @@ export const QUESTIONNAIRE: QuestionGroup[] = [
         help: 'Website addresses, comma-separated. These get crawled and measured alongside whoever the engines name, so a rival the engines never cite is still profiled.',
         placeholder: 'rivalcompany.com, anotherone.com',
         kind: 'textarea',
-        appliesTo: 'both',
+        appliesTo: 'all',
         resolves: 'the competitor crawl — these get profiled on every run',
       },
     ],
@@ -237,7 +282,7 @@ export function questionsFor(businessType: BusinessType): QuestionGroup[] {
   return QUESTIONNAIRE.map((group) => ({
     ...group,
     questions: group.questions.filter(
-      (q) => q.appliesTo === 'both' || q.appliesTo.includes(businessType),
+      (q) => q.appliesTo === 'all' || q.appliesTo.includes(businessType),
     ),
   })).filter((group) => group.questions.length > 0)
 }

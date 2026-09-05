@@ -8,6 +8,7 @@ import { db, schema } from '@/db'
 import { detectClient, type Detection } from '@/onboard/detect'
 import { readGoogleProfile, looksLikeGoogleProfile, type GbpReading } from '@/onboard/gbp'
 import { createClient, draftFrom, mergedAliases, type ClientDraft } from '@/onboard/create-client'
+import { BUSINESS_TYPES, isPlaceBased, type BusinessType } from '@/config'
 import { ACTIVE_CLIENT_COOKIE } from '@/lib/active-client'
 import { saveFacts } from '@/lib/facts'
 import { readAnswers } from '@/lib/read-answers'
@@ -96,7 +97,23 @@ export async function inspectSite(
   const detection = detectionResult.value
   const gbp = gbpResult.status === 'fulfilled' ? gbpResult.value : null
 
-  return { phase: 'review', detection, gbp, draft: draftFrom(detection, gbp) }
+  /**
+   * What the operator said the business is, which beats what the site looked
+   * like. Detection reads signals; a person who has spoken to the client knows.
+   * The draft is rebuilt around their answer so the questionnaire on the next
+   * screen asks a shop about its shelves rather than about its response time.
+   */
+  const draft = draftFrom(detection, gbp)
+  const chosen = businessTypeFrom(formData.get('businessKind'))
+  if (chosen) draft.businessType = chosen
+
+  return { phase: 'review', detection, gbp, draft }
+}
+
+/** A business kind from a form, or null when nothing valid was chosen. */
+function businessTypeFrom(raw: FormDataEntryValue | null): BusinessType | null {
+  const value = String(raw ?? '')
+  return BUSINESS_TYPES.includes(value as BusinessType) ? (value as BusinessType) : null
 }
 
 const numberOrNull = (raw: FormDataEntryValue | null): number | null => {
@@ -144,8 +161,7 @@ export async function saveClient(
     return reject('The detected details were lost. Start again from the website address.')
   }
 
-  const businessType =
-    String(formData.get('businessType') ?? '') === 'ecommerce' ? 'ecommerce' : 'local_service'
+  const businessType = businessTypeFrom(formData.get('businessType')) ?? 'local_service'
 
   const name = String(formData.get('name') ?? '').trim()
 
@@ -171,9 +187,9 @@ export async function saveClient(
   }
 
   if (!draft.name) return reject('The business needs a name.')
-  if (businessType === 'local_service' && draft.states.length === 0) {
+  if (isPlaceBased(businessType) && draft.states.length === 0) {
     return reject(
-      'A local business needs at least one state it serves — that is what decides which place names count as wrong.',
+      'A business customers find by place needs at least one state it serves — that is what decides which place names count as wrong.',
     )
   }
 

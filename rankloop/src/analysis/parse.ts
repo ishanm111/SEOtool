@@ -1,4 +1,4 @@
-import type { Client } from '../lib/client'
+import { isPlaceBasedClient, type Client } from '../lib/client'
 import { MIN_ANSWER_CHARS } from '../config'
 
 /**
@@ -158,12 +158,12 @@ export function extractMentions(answerText: string, client: Client): ParsedMenti
 
   const vocabulary = [...GENERIC_BUSINESS_WORDS, ...industryWords(client)]
   /**
-   * A local business almost always carries a trade word in its name, so demanding
-   * one keeps the noise down. Online stores are frequently pure brand names
-   * ("Nomad", "Ridge"), so requiring vocabulary there would miss most of them —
-   * the markdown formatting is relied on instead.
+   * A business people go to almost always carries a trade word in its name, so
+   * demanding one keeps the noise down. Online stores are frequently pure brand
+   * names ("Nomad", "Ridge"), so requiring vocabulary there would miss most of
+   * them — the markdown formatting is relied on instead.
    */
-  const requireVocabulary = client.businessType === 'local_service'
+  const requireVocabulary = isPlaceBasedClient(client)
 
   // Names from the embedded map panel are structurally certain, so they skip the
   // vocabulary check that the looser patterns below need.

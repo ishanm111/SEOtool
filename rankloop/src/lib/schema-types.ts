@@ -82,7 +82,13 @@ export function isFaqType(type: string): boolean {
   return /^(?:FAQPage|QAPage|Question)$/i.test(type.trim().replace(/^https?:\/\/schema\.org\//i, ''))
 }
 
-/** Whether a page carries business markup of the kind this client should have. */
+/**
+ * Whether a page carries business markup of the kind this client should have.
+ *
+ * A shop is held to the local standard rather than the product one: what an
+ * engine needs from it first is that it is a place, open at a time, at an
+ * address. Product markup on top of that is a separate recommendation.
+ */
 export function hasBusinessSchema(types: string[], businessType: string): boolean {
   return businessType === 'ecommerce' ? types.some(isProductType) : types.some(isLocalBusinessType)
 }

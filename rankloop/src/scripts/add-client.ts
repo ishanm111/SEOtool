@@ -4,13 +4,14 @@ import { openDb, schema } from '../db/raw'
 import { detectClient, deriveWrongGeoTerms, type Detection } from '../onboard/detect'
 import { stateFromAbbreviation, normaliseState, parseTypedPlace } from '../onboard/us-states'
 import { arg, flag } from '../lib/args'
+import { BUSINESS_TYPES, isPlaceBased, type BusinessType } from '../config'
 
 /**
  * Adds a client from nothing but a URL.
  *
  *   npx tsx src/scripts/add-client.ts https://example.com
  *   npx tsx src/scripts/add-client.ts https://example.com --dry-run
- *   npx tsx src/scripts/add-client.ts https://example.com --states=TX --towns="Pasadena TX, Houston TX" --yes
+ *   npx tsx src/scripts/add-client.ts https://example.com --type=local_retail --states=TX --towns="Pasadena TX" --yes
  *
  * Detection is confident about some things (platform, page count) and uncertain
  * about others (which places a business genuinely serves). Everything is printed
@@ -95,6 +96,23 @@ async function main() {
    */
   const statesFlag = arg('states')
   const townsFlag = arg('towns')
+  /**
+   * What kind of business this is, when the operator already knows. Detection
+   * guesses well enough for a plumber and an online store, but a shop looks
+   * like both, and the kind decides which questions are put to the engines.
+   */
+  const typeFlag = arg('type')
+  const businessType: BusinessType = BUSINESS_TYPES.includes(typeFlag as BusinessType)
+    ? (typeFlag as BusinessType)
+    : d.businessType
+  if (typeFlag !== undefined && businessType !== typeFlag) {
+    console.error(`\n--type must be one of: ${BUSINESS_TYPES.join(', ')}`)
+    process.exitCode = 1
+    return
+  }
+  if (businessType !== d.businessType) {
+    console.log(`\nbusiness type: ${businessType} (you said so; the site read as ${d.businessType})`)
+  }
   const assumeYes = flag('yes')
   const interactive = process.stdin.isTTY === true
 
@@ -133,7 +151,7 @@ async function main() {
   let servedStates: string[] = []
   let locations: { name: string; state: string }[] = []
 
-  if (d.businessType === 'local_service') {
+  if (isPlaceBased(businessType)) {
     const suggested = d.states[0]?.state ?? ''
     console.log('\nWhich states does this business ACTUALLY serve?')
     console.log('This decides which places count as wrong-geography, so it matters.')
@@ -199,7 +217,7 @@ async function main() {
       name: d.name,
       domain: d.domain,
       homepageUrl: d.homepageUrl,
-      businessType: d.businessType,
+      businessType,
       platform: d.platform,
       apiBase: d.apiBase,
       aliases: JSON.stringify(d.aliases),

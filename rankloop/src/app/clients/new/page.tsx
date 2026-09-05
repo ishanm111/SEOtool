@@ -6,6 +6,7 @@ import { useFormStatus } from 'react-dom'
 import { inspectSite, saveClient, type OnboardState } from '../../_actions/clients'
 import { QuestionnaireFields } from '../../_components/questionnaire-fields'
 import { questionsFor } from '@/onboard/questionnaire'
+import { BUSINESS_TYPES, BUSINESS_TYPE_LABELS, type BusinessType } from '@/config'
 
 /**
  * Adding a client: paste a website, paste a Google listing, confirm what was
@@ -112,6 +113,39 @@ export default function NewClientPage() {
           </p>
         </div>
 
+        <fieldset>
+          <legend className="field-label">What kind of business is this?</legend>
+          <p className="mb-2 text-xs text-ink-3">
+            It decides what gets asked — of the client, and of the engines. A shop is found by
+            &ldquo;where can I buy X near me&rdquo; and judged on a map pack; a store is found by
+            &ldquo;where do I buy X&rdquo; and judged on product markup and postage. Asking one the
+            other&rsquo;s questions measures the wrong contest.
+          </p>
+          <div className="space-y-1">
+            {BUSINESS_TYPES.map((type) => (
+              <label
+                key={type}
+                className="flex cursor-pointer gap-2 rounded-lg p-2 text-sm hover:bg-sink"
+              >
+                <input type="radio" name="businessKind" value={type} className="mt-1" />
+                <span>
+                  <span className="font-semibold">{BUSINESS_TYPE_LABELS[type].label}</span>
+                  <span className="block text-xs text-ink-3">{BUSINESS_TYPE_LABELS[type].help}</span>
+                </span>
+              </label>
+            ))}
+            <label className="flex cursor-pointer gap-2 rounded-lg p-2 text-sm hover:bg-sink">
+              <input type="radio" name="businessKind" value="" defaultChecked className="mt-1" />
+              <span>
+                <span className="font-semibold">Not sure — work it out from the site</span>
+                <span className="block text-xs text-ink-3">
+                  Detection guesses, shows its reasoning, and you confirm it on the next screen.
+                </span>
+              </span>
+            </label>
+          </div>
+        </fieldset>
+
         {state.phase === 'error' && (
           <div className="rounded-xl border border-rose/25 bg-rose-soft p-4 text-sm text-rose">
             {state.message}
@@ -162,7 +196,8 @@ function Review({ state }: { state: Extract<OnboardState, { phase: 'review' }> }
           />
           <div className="sm:col-span-2">
             <dt className="eyebrow">
-              {d.businessType === 'ecommerce' ? 'Product categories' : 'Services'} ({d.offerings.length})
+              {d.businessType === 'local_service' ? 'Services' : 'Product categories'} (
+              {d.offerings.length})
             </dt>
             <dd className="mt-0.5 text-sm text-ink-2">
               {d.offerings.length ? d.offerings.slice(0, 24).join(', ') : 'none found'}
@@ -255,6 +290,18 @@ function SaveForm({ state }: { state: Extract<OnboardState, { phase: 'review' }>
   const keep = (name: string, fallback: string) => submitted[name] ?? fallback
   const attemptKey = saveState.phase === 'error' ? saveState.attempt ?? 0 : 0
 
+  /**
+   * Held in state, because changing it changes the questions below it.
+   *
+   * An operator who corrects the kind here is telling the tool the business is
+   * something else; leaving a plumber's response-time question on screen for a
+   * shop would be showing them a form for a business they just said this is
+   * not.
+   */
+  const [businessType, setBusinessType] = useState<BusinessType>(
+    (keep('businessType', draft.businessType) as BusinessType) ?? draft.businessType,
+  )
+
   const statesSeen = d.states
     .map((s) => `${s.state} (${s.mentions} mentions)`)
     .join(', ')
@@ -287,11 +334,20 @@ function SaveForm({ state }: { state: Extract<OnboardState, { phase: 'review' }>
             id="businessType"
             name="businessType"
             className="field"
-            defaultValue={keep('businessType', draft.businessType)}
+            value={businessType}
+            onChange={(e) => setBusinessType(e.target.value as BusinessType)}
           >
-            <option value="local_service">Local service business</option>
-            <option value="ecommerce">Online store</option>
+            {BUSINESS_TYPES.map((type) => (
+              <option key={type} value={type}>
+                {BUSINESS_TYPE_LABELS[type].label}
+              </option>
+            ))}
           </select>
+          <p className="mt-1.5 text-xs text-ink-3">
+            {businessType === d.businessType
+              ? BUSINESS_TYPE_LABELS[businessType].help
+              : `You said ${BUSINESS_TYPE_LABELS[businessType].label.toLowerCase()}; the site reads as ${BUSINESS_TYPE_LABELS[d.businessType].label.toLowerCase()}. Yours is being used — the questions below are the ones for it.`}
+          </p>
         </div>
 
         <div>
@@ -416,7 +472,7 @@ function SaveForm({ state }: { state: Extract<OnboardState, { phase: 'review' }>
         </p>
         <QuestionnaireFields
           key={`intake-${attemptKey}`}
-          groups={questionsFor(draft.businessType)}
+          groups={questionsFor(businessType)}
           answers={Object.fromEntries(
             Object.entries(submitted)
               .filter(([k]) => k.startsWith('fact_'))

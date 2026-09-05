@@ -1,6 +1,7 @@
 import 'server-only'
 import { desc, inArray } from 'drizzle-orm'
 import { db, schema } from '../db'
+import { isPlaceBased } from '../config'
 import { listClientCards, listRuns, type ClientCard, type RunRow } from './run-queries'
 
 /**
@@ -146,7 +147,7 @@ export function getWorkspace(): Workspace {
       })
     }
 
-    if (c.client.gbpRating === null && c.client.businessType === 'local_service') {
+    if (c.client.gbpRating === null && isPlaceBased(c.client.businessType)) {
       attention.push({
         clientId: id,
         clientName: name,

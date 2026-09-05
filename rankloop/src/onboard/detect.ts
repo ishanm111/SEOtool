@@ -1,5 +1,5 @@
 import * as cheerio from 'cheerio'
-import type { BusinessType, Platform } from '../config'
+import { isPlaceBased, type BusinessType, type Platform } from '../config'
 import { deriveAliases } from '../lib/client'
 import {
   jsonLdSignals,
@@ -134,11 +134,25 @@ function classify(
   const cityState = [...visibleText.matchAll(/\b[A-Z][a-zA-Z.'-]+(?:\s+[A-Z][a-zA-Z.'-]+)?,\s*([A-Z]{2})\b/g)]
   if (cityState.length >= 3) addL(3, `${cityState.length} "City, ST" mentions`)
 
-  const businessType: BusinessType = ecom > local ? 'ecommerce' : 'local_service'
-  const winner = businessType === 'ecommerce' ? ecomWhy : localWhy
-  const confidence =
-    `${businessType} (${businessType === 'ecommerce' ? ecom : local} vs ` +
-    `${businessType === 'ecommerce' ? local : ecom}) — ${winner.join(', ') || 'no strong signals, defaulted'}`
+  /**
+   * A shop with a door on a street scores on both boards, and that is the
+   * signal — not noise to be resolved by whichever total happens to be larger.
+   * A liquor store with a product catalogue and an address was read as an
+   * online store on one crawl and a service business on the next, and neither
+   * asked it the questions a shop is actually found by.
+   */
+  const bothStrong = ecom >= 4 && local >= 4
+
+  const businessType: BusinessType = bothStrong
+    ? 'local_retail'
+    : ecom > local
+      ? 'ecommerce'
+      : 'local_service'
+
+  const confidence = bothStrong
+    ? `local_retail (sells things: ${ecom}, and is a place: ${local}) — ${[...ecomWhy, ...localWhy].join(', ')}`
+    : `${businessType} (${businessType === 'ecommerce' ? ecom : local} vs ` +
+      `${businessType === 'ecommerce' ? local : ecom}) — ${(businessType === 'ecommerce' ? ecomWhy : localWhy).join(', ') || 'no strong signals, defaulted'}`
 
   return { businessType, confidence, cityStateMentions: cityState.length }
 }
@@ -519,7 +533,7 @@ function mergeGeo(
   signals: JsonLdSignals,
   businessType: BusinessType,
 ): { places: DetectedPlace[]; states: { state: string; mentions: number }[] } {
-  if (businessType !== 'local_service') return fromText
+  if (!isPlaceBased(businessType)) return fromText
 
   const places = [...fromText.places]
   const stateCounts = new Map(fromText.states.map((s) => [s.state, s.mentions]))
@@ -604,7 +618,7 @@ export async function detectClient(input: string): Promise<Detection> {
    * would produce a long, useless list and a nonsense wrong-geography set.
    */
   const geo =
-    businessType === 'local_service'
+    isPlaceBased(businessType)
       ? extractPlaces(documents, urls)
       : { places: [], states: [] }
   const { places, states } = mergeGeo(geo, signals, businessType)
@@ -621,7 +635,7 @@ export async function detectClient(input: string): Promise<Detection> {
   if (offerings.length === 0) offerings = signals.offerings.slice(0, 30)
 
   if (schemaTypes.length === 0) warnings.push('No structured data on the homepage at all.')
-  if (phones.length === 0 && businessType === 'local_service') {
+  if (phones.length === 0 && isPlaceBased(businessType)) {
     warnings.push('No phone number found on the homepage — unusual for a local business.')
   }
   if (phones.length > 1) {
@@ -633,9 +647,9 @@ export async function detectClient(input: string): Promise<Detection> {
    * its markup, only in its copy, or in neither — and "we found nothing" is a
    * different fact from "the copy shows nothing but the markup does".
    */
-  if (businessType === 'local_service' && places.length === 0) {
+  if (isPlaceBased(businessType) && places.length === 0) {
     warnings.push('No place was found in the page copy or the structured data, so the service area could not be read from the site.')
-  } else if (businessType === 'local_service' && cityStateMentions === 0) {
+  } else if (isPlaceBased(businessType) && cityStateMentions === 0) {
     warnings.push(
       `The page copy never writes a place as "City, ST". The service area was read from the structured data instead: ` +
         `${places.slice(0, 6).map((p) => p.name).join(', ')}. Confirm it.`,

@@ -1,6 +1,6 @@
 import type { Recommendation, RecommendInput } from './types'
 import { FILL } from './types'
-import type { Client, ClientLocation } from '../lib/client'
+import { isPlaceBasedClient, sellsProductsClient, type Client, type ClientLocation } from '../lib/client'
 import type { ClientFacts } from '../onboard/questionnaire'
 import { deriveTrade, isVisitTrade } from '../lib/trade'
 
@@ -25,7 +25,7 @@ function servicesList(client: Client): string {
     .slice(0, 12)
     .map((o) => `  <li>${titleCase(o)}</li>`)
     .join('\n')
-  return `<h2>What we ${client.businessType === 'ecommerce' ? 'sell' : 'do'}</h2>\n<ul>\n${items}\n</ul>`
+  return `<h2>What we ${sellsProductsClient(client) ? 'sell' : 'do'}</h2>\n<ul>\n${items}\n</ul>`
 }
 
 /**
@@ -233,9 +233,9 @@ export function recommendNewPages(input: RecommendInput): Recommendation[] {
    * because that was the fallback noun is worse than the missing page it
    * replaces — it publishes a claim about the business that nobody checked.
    */
-  if (client.businessType === 'local_service' && trade === null) return out
+  if (isPlaceBasedClient(client) && trade === null) return out
 
-  if (client.businessType === 'local_service' && trade !== null) {
+  if (isPlaceBasedClient(client) && trade !== null) {
     for (const location of locations) {
       const key = location.name.toLowerCase().replace(/\s+/g, '-')
       if (existingSlugs.includes(key) || existingSlugs.includes(key.replace(/-/g, ''))) continue

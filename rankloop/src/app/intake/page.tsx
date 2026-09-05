@@ -4,6 +4,7 @@ import { db, schema } from '@/db'
 import { activeClient } from '@/lib/active-client'
 import { loadFacts } from '@/lib/facts'
 import { questionsFor, QUESTIONNAIRE } from '@/onboard/questionnaire'
+import { BUSINESS_TYPE_LABELS } from '@/config'
 import { NoClient } from '../_components/no-client'
 import { PageHeader, Stat } from '../_components/ui'
 import { IntakeForm } from './form'
@@ -60,11 +61,7 @@ export default async function IntakePage() {
         <Stat
           label="Questions asked"
           value={asked}
-          hint={
-            client.businessType === 'ecommerce'
-              ? 'the online-store set'
-              : 'the local-business set'
-          }
+          hint={`the ${BUSINESS_TYPE_LABELS[client.businessType].label.toLowerCase()} set`}
         />
       </div>
 
@@ -89,7 +86,8 @@ export default async function IntakePage() {
 
       <p className="text-sm text-ink-3">
         {QUESTIONNAIRE.reduce((n, g) => n + g.questions.length, 0)} questions exist in total; the
-        ones shown are those that apply to a {client.businessType.replace(/_/g, ' ')}.
+        ones shown are those that apply to a{' '}
+        {BUSINESS_TYPE_LABELS[client.businessType].label.toLowerCase()}.
       </p>
     </div>
   )
