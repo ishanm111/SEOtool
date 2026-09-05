@@ -15,14 +15,20 @@ export const dynamic = 'force-dynamic'
  */
 export default function RunsPage() {
   const runs = listRuns()
-  const anyLive = runs.some((r) => r.status === 'running' || r.status === 'queued')
+  const going = runs.filter((r) => r.status === 'running').length
+  const queued = runs.filter((r) => r.status === 'queued').length
+  const anyLive = going + queued > 0
 
   return (
     <div>
       <AutoRefresh active={anyLive} />
       <PageHeader
         title="Runs"
-        subtitle="Each run is the same sequence of scripts the command line runs, in order, stopping at the first failure."
+        subtitle={
+          anyLive
+            ? `${going} running${queued > 0 ? `, ${queued} queued behind them` : ''}. Clients are worked side by side; only the engine questions take turns, because there is one signed-in browser.`
+            : 'Each run is the same sequence of scripts the command line runs, in order, stopping at the first failure.'
+        }
         actions={
           <Link href="/clients" className="btn btn-secondary">
             Start one from a client
