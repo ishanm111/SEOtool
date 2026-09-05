@@ -29,6 +29,17 @@ export type Question = {
   options?: { value: string; label: string }[]
   /** Which business types the question makes sense for. */
   appliesTo: BusinessType[] | 'both'
+  /**
+   * Ways of answering, offered as a completion the operator can take with Tab.
+   *
+   * Frames, not answers. Every number, price, period and licence body in one is
+   * written as an ellipsis, because a suggestion that reads "90 days on labour"
+   * is a fact about a business nobody asked — and the whole point of this
+   * questionnaire is that the tool never states one of those on its own. What a
+   * frame saves is the shape of a good answer: the units, the second half an
+   * operator forgets, the "and what changes it" a bare price leaves out.
+   */
+  frames?: string[]
   /** What answering it unblocks. Empty when it only informs the operator. */
   resolves: string
   /**
@@ -75,6 +86,11 @@ export const QUESTIONNAIRE: QuestionGroup[] = [
         placeholder: 'Mon–Fri 8am–6pm, Sat 9am–2pm, closed Sunday',
         kind: 'textarea',
         appliesTo: 'both',
+        frames: [
+          'Mon–Fri …–…, Sat …–…, closed Sunday',
+          'Open …–… every day',
+          'By appointment only',
+        ],
         resolves: 'the opening-hours answer on every new location page',
       },
       {
@@ -84,6 +100,11 @@ export const QUESTIONNAIRE: QuestionGroup[] = [
         placeholder: 'Usually the same day, and always within 48 hours',
         kind: 'textarea',
         appliesTo: ['local_service'],
+        frames: [
+          'Usually the same day, and always within … hours',
+          'Same day for emergencies; otherwise within … working days',
+          'Within … hours on weekdays, next working day at the weekend',
+        ],
         resolves: 'the response-time sentence in body copy and on every new page',
       },
       {
@@ -93,6 +114,11 @@ export const QUESTIONNAIRE: QuestionGroup[] = [
         placeholder: 'Free parking at the rear; entrance is on the side street',
         kind: 'textarea',
         appliesTo: 'both',
+        frames: [
+          'Free parking at the rear; the entrance is on …',
+          'Street parking only; the door is …',
+          'Inside …, on the … floor',
+        ],
         resolves: 'the access note on new location pages',
       },
     ],
@@ -124,6 +150,11 @@ export const QUESTIONNAIRE: QuestionGroup[] = [
         placeholder: 'Most call-outs land between $120 and $260; the difference is usually the part',
         kind: 'textarea',
         appliesTo: 'both',
+        frames: [
+          'Most jobs land between $… and $…; the difference is usually …',
+          'A call-out is $…, taken off the price of the work if you go ahead',
+          'Priced per …, from $…',
+        ],
         resolves: 'the pricing answer on new pages and buying guides',
         mustBeConfirmed: true,
       },
@@ -134,6 +165,13 @@ export const QUESTIONNAIRE: QuestionGroup[] = [
         placeholder: 'USD',
         kind: 'text',
         appliesTo: ['ecommerce'],
+        frames: [
+          'USD',
+          'CAD',
+          'GBP',
+          'EUR',
+          'AUD',
+        ],
         resolves: 'the currency code in Product structured data',
       },
       {
@@ -143,6 +181,11 @@ export const QUESTIONNAIRE: QuestionGroup[] = [
         placeholder: '90 days on labour, manufacturer warranty on parts',
         kind: 'textarea',
         appliesTo: 'both',
+        frames: [
+          '… days on labour, manufacturer warranty on parts',
+          '… year guarantee on the work',
+          'No warranty is offered',
+        ],
         resolves: 'the warranty answer on new pages',
         mustBeConfirmed: true,
       },
@@ -153,6 +196,11 @@ export const QUESTIONNAIRE: QuestionGroup[] = [
         placeholder: '30 days unworn, in the original box, buyer pays return postage',
         kind: 'textarea',
         appliesTo: ['ecommerce'],
+        frames: [
+          '… days, unused and in the original packaging; the buyer pays return postage',
+          '… days, no questions asked, refund to the original payment method',
+          'No returns on …',
+        ],
         resolves: 'the returns answer on new pages',
         mustBeConfirmed: true,
       },
@@ -179,6 +227,11 @@ export const QUESTIONNAIRE: QuestionGroup[] = [
         placeholder: 'TDLR licence #12345, fully insured, factory-certified for Bosch',
         kind: 'textarea',
         appliesTo: 'both',
+        frames: [
+          'Licence #…, issued by …; fully insured',
+          '… certified, public liability cover to $…',
+          'Insured; no licence is required for this work in …',
+        ],
         resolves: 'credibility claims that would otherwise be blocked',
         mustBeConfirmed: true,
       },
@@ -189,6 +242,11 @@ export const QUESTIONNAIRE: QuestionGroup[] = [
         placeholder: '4,000 repairs since 2011; 92% fixed on the first visit',
         kind: 'textarea',
         appliesTo: 'both',
+        frames: [
+          '… jobs completed since …',
+          '…% fixed on the first visit',
+          'Average response time of … minutes, measured across … calls',
+        ],
         resolves: 'statistics in rewritten body copy',
         mustBeConfirmed: true,
       },
@@ -199,6 +257,11 @@ export const QUESTIONNAIRE: QuestionGroup[] = [
         placeholder: 'We do not do commercial work, and never claim 24/7',
         kind: 'textarea',
         appliesTo: 'both',
+        frames: [
+          'We do not do commercial work',
+          'Never claim availability we do not have — no 24/7, no same-day guarantee',
+          'Do not mention …',
+        ],
         resolves: '',
       },
     ],

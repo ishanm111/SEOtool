@@ -1,4 +1,5 @@
 import type { QuestionGroup } from '@/onboard/questionnaire'
+import { SuggestingField } from './suggesting-field'
 
 /**
  * The intake questions, rendered as plain fields.
@@ -28,6 +29,13 @@ export function QuestionnaireFields({
 }) {
   return (
     <div className="space-y-8">
+      <p className="text-xs text-ink-3">
+        Several boxes suggest a way of answering as you type. Press{' '}
+        <kbd className="rounded border border-line px-1">Tab</kbd> to take the suggestion; the
+        blanks in it are yours to fill, because nothing the tool has not been told is ever written
+        as a fact.
+      </p>
+
       {groups.map((group) => (
         <fieldset key={group.title}>
           <legend className="display text-base">{group.title}</legend>
@@ -48,7 +56,16 @@ export function QuestionnaireFields({
                     )}
                   </label>
 
-                  {q.kind === 'textarea' ? (
+                  {q.kind !== 'select' && q.frames && q.frames.length > 0 ? (
+                    <SuggestingField
+                      id={id}
+                      name={id}
+                      kind={q.kind}
+                      placeholder={q.placeholder}
+                      defaultValue={value}
+                      suggestions={q.frames}
+                    />
+                  ) : q.kind === 'textarea' ? (
                     <textarea
                       id={id}
                       name={id}
