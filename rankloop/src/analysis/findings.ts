@@ -515,13 +515,39 @@ export function buildFindings(input: {
 
     if (leaders.length > 0) {
       const avgCity = Math.round(leaders.reduce((a, c) => a + c.cityPageCount, 0) / leaders.length)
+      /**
+       * Counted, not assumed.
+       *
+       * This used to end "This site has none", which is true of most clients and
+       * badly wrong for the ones who already built the pages — and being told to
+       * publish pages that exist is how a client stops believing the rest of the
+       * report. Where the count is healthy the gap is what is ON the pages, so
+       * the advice changes with it.
+       */
+      const ownCityPages = pages.filter((p) =>
+        locations.some((l) => {
+          const slug = l.name.toLowerCase().replace(/\s+/g, '-')
+          const own = p.slug.toLowerCase()
+          return own.includes(slug) || own.includes(slug.replace(/-/g, ''))
+        }),
+      ).length
+
+      const standing =
+        ownCityPages === 0
+          ? 'This site has none.'
+          : ownCityPages >= avgCity
+            ? `This site has ${ownCityPages}, which matches them on count.`
+            : `This site has ${ownCityPages}.`
+
       out.push({
         targetType: 'site',
         category: 'competitor-location-pages',
-        severity: 'critical',
-        issue: `${leaders.length} of ${localRivals.length} competitors AI recommends are built on location pages, averaging ${avgCity} each. This site has none.`,
+        severity: ownCityPages >= avgCity ? 'medium' : 'critical',
+        issue: `${leaders.length} of ${localRivals.length} competitors AI recommends are built on location pages, averaging ${avgCity} each. ${standing}`,
         proposedText:
-          'Publish one page per place served, then keep adding them. This is the clearest content pattern among the competitors that win.',
+          ownCityPages >= avgCity
+            ? 'The pages exist, so the gap is what is on them. Compare them against the rivals listed here for depth, structured data and concrete numbers before writing any new ones.'
+            : 'Publish one page per place served, then keep adding them. This is the clearest content pattern among the competitors that win.',
         evidence: leaders
           .map((c) => {
             const pct = c.pageCount ? Math.round((c.cityPageCount / c.pageCount) * 100) : 0

@@ -2,6 +2,7 @@ import fs from 'node:fs'
 import { activeClient } from '@/lib/active-client'
 import { reportFileFor } from '@/lib/report-file'
 import { NoClient } from '../_components/no-client'
+import { NeedsRun } from '../_components/ui'
 
 export const dynamic = 'force-dynamic'
 
@@ -24,8 +25,8 @@ export default async function ReportPage() {
     <div className="space-y-6">
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Client report</h1>
-          <p className="mt-1 text-sm text-zinc-500">
+          <h1 className="display text-3xl">Client report</h1>
+          <p className="mt-1 text-sm text-ink-3">
             {exists
               ? `The audit as ${client.name} would receive it. Generated ${generatedOn}.`
               : `No report has been generated for ${client.name} yet.`}
@@ -36,7 +37,7 @@ export default async function ReportPage() {
             href={`/api/report?domain=${encodeURIComponent(client.domain)}`}
             target="_blank"
             rel="noreferrer"
-            className="rounded-md bg-zinc-900 px-3 py-2 text-sm font-medium text-white transition hover:bg-zinc-700"
+            className="btn btn-secondary"
           >
             Open full page
           </a>
@@ -51,15 +52,13 @@ export default async function ReportPage() {
           // viewport whatever the surrounding stylesheet does, and a report that
           // renders 150px tall reads as a broken report.
           style={{ height: '80vh' }}
-          className="w-full rounded-lg border border-zinc-200 bg-white"
+          className="w-full card"
         />
       ) : (
-        <div className="rounded-lg border border-zinc-200 bg-white p-6 text-sm text-zinc-600">
-          <p>Generate one, then reload this page:</p>
-          <pre className="mt-3 rounded bg-zinc-900 px-4 py-3 text-xs text-zinc-100">
-            npm run report -- --client={client.id}
-          </pre>
-        </div>
+        <NeedsRun
+          what="No report has been generated yet"
+          step="The report is the last step of a run, rendered from everything the earlier steps collected."
+        />
       )}
     </div>
   )

@@ -5,17 +5,17 @@ import { activeClient } from '@/lib/active-client'
 export const dynamic = 'force-dynamic'
 
 const SEVERITY_STYLE: Record<string, string> = {
-  critical: 'border-red-300 bg-red-50',
-  high: 'border-orange-300 bg-orange-50',
-  medium: 'border-amber-200 bg-amber-50',
-  low: 'border-zinc-200 bg-white',
+  critical: 'border-rose/30 bg-rose-soft',
+  high: 'border-clay/30 bg-clay-soft',
+  medium: 'border-amber/25 bg-amber-soft',
+  low: 'border-line bg-white',
 }
 
 const BADGE_STYLE: Record<string, string> = {
-  critical: 'bg-red-600 text-white',
-  high: 'bg-orange-500 text-white',
-  medium: 'bg-amber-400 text-amber-950',
-  low: 'bg-zinc-200 text-zinc-700',
+  critical: 'bg-rose text-white',
+  high: 'bg-clay text-white',
+  medium: 'bg-amber-soft text-amber',
+  low: 'bg-sink text-ink-2',
 }
 
 export default async function FindingsPage() {
@@ -28,8 +28,8 @@ export default async function FindingsPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Findings</h1>
-        <p className="mt-1 text-sm text-zinc-500">
+        <h1 className="display text-3xl">Findings</h1>
+        <p className="mt-1 text-sm text-ink-3">
           Ranked by severity. Every rule traces to measured research, not opinion.
         </p>
       </div>
@@ -41,7 +41,7 @@ export default async function FindingsPage() {
               <span className={`rounded px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide ${BADGE_STYLE[f.severity]}`}>
                 {f.severity}
               </span>
-              <span className="text-xs font-medium uppercase tracking-wide text-zinc-500">
+              <span className="eyebrow">
                 {f.category}
               </span>
             </div>
@@ -49,8 +49,8 @@ export default async function FindingsPage() {
             <p className="mt-3 text-sm font-medium leading-relaxed">{f.issue}</p>
 
             {f.proposedText && (
-              <div className="mt-3 rounded border border-zinc-200 bg-white p-3">
-                <div className="text-[10px] font-bold uppercase tracking-wide text-emerald-700">
+              <div className="mt-3 rounded border border-line bg-white p-3">
+                <div className="text-[10px] font-bold uppercase tracking-wide text-moss-deep">
                   What to do
                 </div>
                 <p className="mt-1 text-sm leading-relaxed">{f.proposedText}</p>
@@ -58,7 +58,7 @@ export default async function FindingsPage() {
             )}
 
             {f.evidence && (
-              <p className="mt-3 text-xs text-zinc-500">
+              <p className="mt-3 text-xs text-ink-3">
                 <span className="font-semibold">Evidence:</span> {f.evidence}
               </p>
             )}
@@ -68,31 +68,31 @@ export default async function FindingsPage() {
 
       {paragraphLevel.length > 0 && (
         <section className="space-y-3">
-          <h2 className="pt-4 text-lg font-semibold tracking-tight">
+          <h2 className="display pt-4 text-xl">
             Paragraph-level fixes ({paragraphLevel.length})
           </h2>
           {paragraphLevel.map((f) => (
-            <article key={f.id} className="rounded-lg border border-zinc-200 bg-white p-5">
+            <article key={f.id} className="card p-5">
               <div className="flex flex-wrap items-center gap-2">
                 <span className={`rounded px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide ${BADGE_STYLE[f.severity]}`}>
                   {f.severity}
                 </span>
                 {f.pageSlug && (
-                  <span className="text-xs font-medium text-zinc-500">/{f.pageSlug}</span>
+                  <span className="text-xs font-medium text-ink-3">/{f.pageSlug}</span>
                 )}
               </div>
               <p className="mt-2 text-sm font-medium">{f.issue}</p>
               {f.currentText && (
-                <div className="mt-3 rounded border border-zinc-200 bg-zinc-50 p-3">
-                  <div className="text-[10px] font-bold uppercase tracking-wide text-zinc-500">
+                <div className="mt-3 rounded border border-line bg-sink p-3">
+                  <div className="eyebrow">
                     Current text
                   </div>
-                  <p className="mt-1 text-sm leading-relaxed text-zinc-700">{f.currentText}</p>
+                  <p className="mt-1 text-sm leading-relaxed text-ink-2">{f.currentText}</p>
                 </div>
               )}
               {f.proposedText && (
-                <div className="mt-2 rounded border border-emerald-200 bg-emerald-50 p-3">
-                  <div className="text-[10px] font-bold uppercase tracking-wide text-emerald-700">
+                <div className="mt-2 rounded border border-moss/25 bg-moss-soft p-3">
+                  <div className="text-[10px] font-bold uppercase tracking-wide text-moss-deep">
                     What to do
                   </div>
                   <p className="mt-1 text-sm leading-relaxed">{f.proposedText}</p>

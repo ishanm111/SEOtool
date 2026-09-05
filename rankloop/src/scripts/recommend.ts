@@ -3,6 +3,7 @@ import { openDb, schema } from '../db/raw'
 import { resolveClient, clientLocations } from '../lib/resolve-client'
 import { buildRecommendations, countPlaceholders, summarise } from '../recommend'
 import { arg } from '../lib/args'
+import { loadFacts } from '../lib/facts'
 
 /**
  * Produces the deliverable: what to change, page by page.
@@ -27,7 +28,10 @@ function main() {
     return
   }
 
-  const recs = buildRecommendations({ client, locations, pages, paragraphs })
+  // The intake answers are what turn a blocked recommendation into a
+  // publishable one, so they are loaded on every build rather than optionally.
+  const facts = loadFacts(db, client.id)
+  const recs = buildRecommendations({ client, locations, pages, paragraphs, facts })
   const stats = summarise(recs)
 
   db.delete(schema.recommendations).where(eq(schema.recommendations.clientId, client.id)).run()

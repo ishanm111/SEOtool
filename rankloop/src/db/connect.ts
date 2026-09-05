@@ -22,6 +22,18 @@ export function openSqlite(
   const sqlite = new Database(file)
   sqlite.pragma('journal_mode = WAL')
 
+  /**
+   * Wait for a busy database rather than failing on it.
+   *
+   * Several clients can be run at once, and each pipeline step is its own
+   * process with its own connection. WAL lets them all read while one writes,
+   * but the writer lock is still exclusive, and SQLite's default behaviour on
+   * meeting it is to give up instantly — which would turn "two clients running
+   * together" into random SQLITE_BUSY failures in whichever step happened to
+   * write second. Thirty seconds is far longer than any write here takes.
+   */
+  sqlite.pragma('busy_timeout = 30000')
+
   let closed = false
   const shutdown = () => {
     if (closed) return

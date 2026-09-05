@@ -39,3 +39,18 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# Client work product: databases, generated reports, answer screenshots and the
+# signed-in browser profiles. All of it is a specific business's data, and none
+# of it should ever reach a repository.
+data.db
+data.db-*
+data-v1-backup.db*
+/reports/
+/screenshots/
+/generated/
+/.chrome-profile/
+/.chromium-profile/
+
+# Snapshots taken before a destructive action. Same client data as above.
+.backup-*/

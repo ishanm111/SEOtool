@@ -1,4 +1,5 @@
 import type { Client, ClientLocation } from '../lib/client'
+import type { ClientFacts } from '../onboard/questionnaire'
 
 /**
  * A single change to make. Never design — copy, metadata, structured data, or a
@@ -47,6 +48,12 @@ export type RecommendInput = {
   locations: ClientLocation[]
   pages: PageRow[]
   paragraphs: ParagraphRow[]
+  /**
+   * Answers to the intake questionnaire. Where one exists it is used verbatim;
+   * where it does not, the placeholder stays. Nothing here is ever guessed at
+   * from a similar-sounding answer.
+   */
+  facts?: ClientFacts
 }
 
 /**

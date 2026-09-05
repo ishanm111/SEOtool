@@ -4,7 +4,7 @@
  * is — they were drifting apart when each had its own copy.
  */
 
-export const UA = 'RankLoop/0.2 (SEO audit; respects robots)'
+export const UA = 'SEOmyze/0.2 (SEO audit; respects robots)'
 
 const SITEMAP_CANDIDATES = [
   '/sitemap_index.xml',
