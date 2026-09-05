@@ -2,6 +2,7 @@ import readline from 'node:readline/promises'
 import { eq } from 'drizzle-orm'
 import { openDb, schema } from '../db/raw'
 import { resolveClient, clientLocations } from '../lib/resolve-client'
+import { isPlaceBasedClient } from '../lib/client'
 import { generatePrompts } from '../prompts/generate'
 import { flag } from '../lib/args'
 import { groupByMarket, marketLabelOf } from '../lib/markets'
@@ -26,7 +27,7 @@ async function main() {
 
   if (prompts.length === 0) {
     console.log(`No prompts could be generated for ${client.name}.`)
-    if (client.businessType === 'local_service' && locations.length === 0) {
+    if (isPlaceBasedClient(client) && locations.length === 0) {
       console.log('It is a local business with no locations recorded — add some and try again.')
     } else if (client.offerings.length === 0) {
       console.log('No offerings were detected on the site, so there is nothing to ask about.')

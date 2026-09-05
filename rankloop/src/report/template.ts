@@ -62,7 +62,7 @@ type Step = { title: string; meta: string; body: string }
  */
 function buildSteps(d: ReportData): Step[] {
   const steps: Step[] = []
-  const isLocal = d.businessType === 'local_service'
+  const isLocal = d.businessType !== 'ecommerce'
 
   if (d.hasGoogleProfile && d.gbp.hasWebsite === false) {
     steps.push({
@@ -393,7 +393,7 @@ ${section('How this was measured')}
 
 <div class="callout warn">
   <div class="label">One note on expectations</div>
-  Search and AI visibility move slowly. ${d.businessType === 'local_service'
+  Search and AI visibility move slowly. ${d.businessType !== 'ecommerce'
     ? 'Local rankings typically take two to three months to shift and six or more to compound.'
     : 'Product and category rankings typically take three to six months to shift, and longer in competitive categories.'}
   The work in this report is what changes the inputs; the timeline depends on your market.

@@ -62,7 +62,7 @@ function dedupe(prompts: GeneratedPrompt[]): GeneratedPrompt[] {
  * conversational, trust-led questions ("someone reliable", "won't overcharge
  * me"), and those retrieve a measurably different set of sources.
  */
-function localServicePrompts(client: Client, locations: ClientLocation[]): GeneratedPrompt[] {
+function localPrompts(client: Client, locations: ClientLocation[]): GeneratedPrompt[] {
   if (locations.length === 0) return []
 
   const offerings = client.offerings.map(splitOffering)
@@ -98,10 +98,14 @@ function localServicePrompts(client: Client, locations: ClientLocation[]): Gener
     /**
      * A shop and a call-out trade are found through different questions. Nobody
      * asks who can come out today to fix their tequila, and nobody asks where to
-     * buy a boiler repair. The battery is chosen by what the offerings say the
-     * business does, not by an assumption about local businesses.
+     * buy a boiler repair.
+     *
+     * A client recorded as a shop takes the shop battery outright — that is what
+     * the operator said it was. For anything else the trade decides, which is
+     * how businesses added before the question was asked still get the right
+     * questions put about them.
      */
-    action === null && isVisitTrade(trade)
+    client.businessType === 'local_retail' || (action === null && isVisitTrade(trade))
       ? visitTradePrompts({ market, things, trade })
       : marketPrompts({ market, things, action: action ?? 'service', trade }),
   )
@@ -581,7 +585,7 @@ export function generatePrompts(client: Client, locations: ClientLocation[]): Ge
   const prompts =
     client.businessType === 'ecommerce'
       ? ecommercePrompts(client)
-      : localServicePrompts(client, locations)
+      : localPrompts(client, locations)
 
   return dedupe(prompts)
 }

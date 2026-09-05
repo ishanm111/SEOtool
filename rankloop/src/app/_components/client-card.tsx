@@ -1,5 +1,6 @@
 import Link from 'next/link'
 import type { ClientCard as CardData } from '@/lib/run-queries'
+import { BUSINESS_TYPE_LABELS } from '@/config'
 import { Pill, StatusTag, timeAgo } from './ui'
 import { StartRun } from './start-run'
 import { SwitchToClient } from './switch-to-client'
@@ -30,7 +31,7 @@ export function ClientCard({ card: c }: { card: CardData }) {
           </a>
         </div>
         <div className="flex shrink-0 flex-wrap justify-end gap-1.5">
-          <Pill tone="neutral">{c.client.businessType.replace(/_/g, ' ')}</Pill>
+          <Pill tone="neutral">{BUSINESS_TYPE_LABELS[c.client.businessType].label}</Pill>
           <Pill tone="neutral">{c.client.platform}</Pill>
         </div>
       </div>

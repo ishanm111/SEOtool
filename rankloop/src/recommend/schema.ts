@@ -1,6 +1,6 @@
 import type { Recommendation, RecommendInput, PageRow } from './types'
 import { FILL } from './types'
-import type { Client, ClientLocation } from '../lib/client'
+import { isPlaceBasedClient, sellsProductsClient, type Client, type ClientLocation } from '../lib/client'
 import type { ClientFacts } from '../onboard/questionnaire'
 import { isLocalBusinessType, isProductType, mostSpecificBusinessType } from '../lib/schema-types'
 
@@ -98,19 +98,22 @@ function breadcrumbNode(page: PageRow) {
 export function recommendSchema(input: RecommendInput): Recommendation[] {
   const { client, locations, pages, facts = {} } = input
   const out: Recommendation[] = []
-  const isEcom = client.businessType === 'ecommerce'
+  // Separate questions: a shop needs Product markup on what it sells *and*
+  // LocalBusiness markup on the pages that place it somewhere.
+  const wantsProduct = sellsProductsClient(client)
+  const wantsPlace = isPlaceBasedClient(client)
 
   for (const page of pages) {
     const existing = JSON.parse(page.schemaTypes || '[]') as string[]
     const nodes: unknown[] = []
     const missing: string[] = []
 
-    if (isEcom && page.pageType === 'product') {
+    if (wantsProduct && page.pageType === 'product') {
       if (!existing.some(isProductType)) {
         nodes.push(productNode(client, page, facts))
         missing.push('Product')
       }
-    } else if (!isEcom) {
+    } else if (wantsPlace) {
       /**
        * Only when there is no business markup at all. A page already marked up
        * as a LocalBusiness subtype — `LiquorStore`, `Dentist`, `AutoRepair` —

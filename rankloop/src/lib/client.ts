@@ -1,4 +1,4 @@
-import type { BusinessType, Platform } from '../config'
+import { isPlaceBased, sellsProducts, type BusinessType, type Platform } from '../config'
 
 /**
  * A client, with its JSON columns already parsed.
@@ -89,6 +89,18 @@ export function hydrateClient(row: ClientRow): Client {
 
 export const isLocalService = (c: Client) => c.businessType === 'local_service'
 export const isEcommerce = (c: Client) => c.businessType === 'ecommerce'
+export const isLocalRetail = (c: Client) => c.businessType === 'local_retail'
+
+/**
+ * The two questions the rest of the pipeline actually asks.
+ *
+ * A shop with a door on a street answers yes to both, which is the whole reason
+ * it is its own kind: it is judged on a map pack like a plumber and on product
+ * markup like a store, and every place that tested `=== 'ecommerce'` used to
+ * decide one of those for it wrongly.
+ */
+export const isPlaceBasedClient = (c: Client) => isPlaceBased(c.businessType)
+export const sellsProductsClient = (c: Client) => sellsProducts(c.businessType)
 export const hasGoogleProfile = (c: Client) => c.gbpRating !== null || c.gbpUrl !== null
 
 /**
