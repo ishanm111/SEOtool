@@ -2,7 +2,15 @@
 
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
-import { cancelRun, deleteRun, previousRunSpec, startRun, type RunOptions } from '@/lib/runner'
+import {
+  cancelRun,
+  deleteRun,
+  pauseRun,
+  previousRunSpec,
+  resumeRun,
+  startRun,
+  type RunOptions,
+} from '@/lib/runner'
 import { ALL_STEP_KEYS, DESK_STEP_KEYS, STEP_BY_KEY, type StepKey } from '@/lib/pipeline'
 
 /**
@@ -82,8 +90,29 @@ export async function startRunAction(
 export async function cancelRunAction(formData: FormData) {
   const runId = Number(formData.get('runId'))
   if (Number.isInteger(runId)) cancelRun(runId)
-  revalidatePath('/runs')
-  revalidatePath(`/runs/${runId}`)
+  // Every screen that shows a run now offers to stop it, so every screen has
+  // to be told when one was.
+  revalidatePath('/', 'layout')
+}
+
+/**
+ * Holds a run, and lets it go again.
+ *
+ * Pausing is not stopping: the child process stays alive, the signed-in browser
+ * stays this run's, and resuming carries on from the question it stopped on.
+ * That distinction is the whole reason both buttons exist — a measurement
+ * restarted from the top re-asks an hour of questions.
+ */
+export async function pauseRunAction(formData: FormData) {
+  const runId = Number(formData.get('runId'))
+  if (Number.isInteger(runId)) pauseRun(runId)
+  revalidatePath('/', 'layout')
+}
+
+export async function resumeRunAction(formData: FormData) {
+  const runId = Number(formData.get('runId'))
+  if (Number.isInteger(runId)) resumeRun(runId)
+  revalidatePath('/', 'layout')
 }
 
 /**

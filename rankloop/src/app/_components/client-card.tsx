@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import type { ClientCard as CardData } from '@/lib/run-queries'
 import { Pill, StatusTag, timeAgo } from './ui'
+import { RunControls } from './run-controls'
 import { StartRun } from './start-run'
 import { SwitchToClient } from './switch-to-client'
 
@@ -109,7 +110,8 @@ export function ClientCard({ card: c }: { card: CardData }) {
           )}
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          {c.activeRun && <RunControls runId={c.activeRun.id} status={c.activeRun.status} />}
           <SwitchToClient clientId={c.client.id} />
           <StartRun
             clientId={c.client.id}

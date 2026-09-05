@@ -3,7 +3,7 @@ import { desc, eq, inArray } from 'drizzle-orm'
 import { db, schema } from '../db'
 import { isAnswer, mentionsClient } from '../analysis/parse'
 import { hydrateClient, type Client } from './client'
-import { parseStepKeys } from './pipeline'
+import { isLive, parseStepKeys } from './pipeline'
 import { reconcileStaleRuns } from './runner'
 
 /**
@@ -192,7 +192,7 @@ export function listClientCards(): ClientCard[] {
       competitorCount: competitors.filter((c) => c.clientId === client.id).length,
       hasCredentials: creds.some((c) => c.clientId === client.id && c.status !== 'failed'),
       lastRun: clientRuns[0] ?? null,
-      activeRun: clientRuns.find((r) => r.status === 'running' || r.status === 'queued') ?? null,
+      activeRun: clientRuns.find((r) => isLive(r.status)) ?? null,
     }
   })
 }

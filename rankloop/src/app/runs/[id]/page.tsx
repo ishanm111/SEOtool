@@ -1,9 +1,9 @@
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { getRunDetail } from '@/lib/run-queries'
-import { STEP_BY_KEY, type StepKey } from '@/lib/pipeline'
+import { isLive, STEP_BY_KEY, type StepKey } from '@/lib/pipeline'
 import { MAX_PARALLEL_RUNS } from '@/lib/runner'
-import { cancelRunAction } from '../../_actions/runs'
+import { RunControls } from '../../_components/run-controls'
 import { PageHeader, StatusTag, timeAgo, duration } from '../../_components/ui'
 import { AutoRefresh } from '../../_components/auto-refresh'
 
@@ -22,7 +22,7 @@ export default async function RunPage({ params }: { params: Promise<{ id: string
   const run = getRunDetail(Number(id))
   if (!run) notFound()
 
-  const live = run.status === 'running' || run.status === 'queued'
+  const live = isLive(run.status)
 
   return (
     <div>
@@ -42,14 +42,7 @@ export default async function RunPage({ params }: { params: Promise<{ id: string
         actions={
           <>
             <StatusTag status={run.status} />
-            {live && (
-              <form action={cancelRunAction}>
-                <input type="hidden" name="runId" value={run.id} />
-                <button type="submit" className="btn btn-danger">
-                  Stop this run
-                </button>
-              </form>
-            )}
+            <RunControls runId={run.id} status={run.status} size="md" />
             <Link href="/runs" className="btn btn-secondary">
               All runs
             </Link>
@@ -79,6 +72,17 @@ export default async function RunPage({ params }: { params: Promise<{ id: string
           <p className="mt-1 text-sm text-ink-2">
             {MAX_PARALLEL_RUNS} clients are worked at a time, and that many are already going.
             This run starts itself the moment one of them finishes — there is nothing to press.
+          </p>
+        </div>
+      )}
+
+      {run.status === 'paused' && (
+        <div className="mb-6 rounded-xl border border-amber/25 bg-amber-soft p-5">
+          <p className="text-sm font-semibold text-amber">Held where it is</p>
+          <p className="mt-1 text-sm text-ink-2">
+            The step is still open and still holds the signed-in browser, so no other client can be
+            measured until this one resumes or is stopped. Resuming carries on from the question it
+            stopped on rather than starting the step again.
           </p>
         </div>
       )}

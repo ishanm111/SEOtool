@@ -8,6 +8,7 @@ import { resolveClient, clientLocations } from '../lib/resolve-client'
 import { groupByMarket, marketKeyOf } from '../lib/markets'
 import { loadEnv } from '../lib/env'
 import { arg, flag } from '../lib/args'
+import { waitIfPaused } from '../lib/pause-gate'
 
 loadEnv()
 
@@ -164,9 +165,24 @@ async function main() {
   // A bot check means every later Google request is wasted, so stop asking.
   let googleBlocked = false
 
+  /**
+   * The console's run id, when this was started from the console.
+   *
+   * It is how a pause reaches the middle of a measurement. Nothing else uses
+   * it, and running this by hand simply never passes it.
+   */
+  const pipelineRunId = Number(arg('run')) || null
+
   let n = 0
   try {
     for (const prompt of prompts) {
+      /**
+       * Held between questions, never inside one. A pause landing mid-answer
+       * would lose the answer being collected and, worse, leave the engine's
+       * page half way through a reply nobody read.
+       */
+      await waitIfPaused(pipelineRunId)
+
       for (const engine of engines) {
         if ((consecutiveFailures.get(engine.name) ?? 0) >= FAILURE_LIMIT) continue
 
