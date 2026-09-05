@@ -14,9 +14,18 @@ import { SuggestingField } from './suggesting-field'
 export function QuestionnaireFields({
   groups,
   answers = {},
+  sources = {},
 }: {
   groups: QuestionGroup[]
   answers?: Record<string, string>
+  /**
+   * Where a prefilled answer came from, by question key.
+   *
+   * Shown next to the field rather than left implicit: a box that filled
+   * itself and said nothing about it is a box nobody checks, and everything
+   * read off a listing is a suggestion until a person confirms it.
+   */
+  sources?: Record<string, string>
 }) {
   return (
     <div className="space-y-8">
@@ -83,6 +92,12 @@ export function QuestionnaireFields({
                     />
                   )}
 
+                  {sources[q.key] && (
+                    <p className="mt-1.5 text-xs text-sky">
+                      Filled in from what was {sources[q.key]} — check it, and change it if it is
+                      wrong or out of date.
+                    </p>
+                  )}
                   <p className="mt-1.5 text-xs text-ink-3">{q.help}</p>
                   {q.resolves && (
                     <p className="mt-0.5 text-xs text-moss-deep">Answering this fills in {q.resolves}.</p>

@@ -7,6 +7,7 @@ import { inspectSite, saveClient, type OnboardState } from '../../_actions/clien
 import { QuestionnaireFields } from '../../_components/questionnaire-fields'
 import { TownsField } from '../../_components/towns-field'
 import { questionsFor } from '@/onboard/questionnaire'
+import { factsFromProfile } from '@/onboard/gbp-facts'
 import { StatePicker } from '../../_components/state-picker'
 
 /**
@@ -206,6 +207,19 @@ function Review({ state }: { state: Extract<OnboardState, { phase: 'review' }> }
               value={gbp.address ?? gbp.serviceArea ?? (gbp.readListing ? '—' : 'not read')}
             />
             <Fact
+              label="Opening hours"
+              value={
+                gbp.hours ??
+                (gbp.readListing
+                  ? 'not served to an automated read — the warnings below say what was seen'
+                  : 'not read')
+              }
+            />
+            <Fact
+              label="Price bracket"
+              value={gbp.priceLevel ?? (gbp.readListing ? 'none shown' : 'not read')}
+            />
+            <Fact
               label="Website on the listing"
               value={
                 gbp.website ? (
@@ -241,7 +255,16 @@ function Review({ state }: { state: Extract<OnboardState, { phase: 'review' }> }
 }
 
 function SaveForm({ state }: { state: Extract<OnboardState, { phase: 'review' }> }) {
-  const { detection: d, draft } = state
+  const { detection: d, draft, gbp } = state
+
+  /**
+   * Whatever the Google listing already answers, answered.
+   *
+   * Anything typed on a rejected attempt wins over it — an operator who
+   * corrected Google's opening hours and then hit a validation error must not
+   * be handed Google's version back.
+   */
+  const prefilled = factsFromProfile(gbp)
   const [saveState, action] = useActionState<OnboardState, FormData>(saveClient, { phase: 'idle' })
 
   /**
@@ -408,15 +431,27 @@ function SaveForm({ state }: { state: Extract<OnboardState, { phase: 'review' }>
           price, a warranty, a response time or a credential — it writes a visible placeholder
           instead, and a placeholder blocks the change from being published. Most of a fix list
           ends up waiting on the handful of facts below.
+          {Object.keys(prefilled.answers).length > 0 && (
+            <>
+              {' '}
+              {Object.keys(prefilled.answers).length} of them were read off the Google listing and
+              are marked as such — they are still worth a look, because a listing goes out of date
+              like anything else.
+            </>
+          )}
         </p>
         <QuestionnaireFields
           key={`intake-${attemptKey}`}
           groups={questionsFor(draft.businessType)}
-          answers={Object.fromEntries(
-            Object.entries(submitted)
-              .filter(([k]) => k.startsWith('fact_'))
-              .map(([k, v]) => [k.slice('fact_'.length), v]),
-          )}
+          answers={{
+            ...prefilled.answers,
+            ...Object.fromEntries(
+              Object.entries(submitted)
+                .filter(([k]) => k.startsWith('fact_'))
+                .map(([k, v]) => [k.slice('fact_'.length), v]),
+            ),
+          }}
+          sources={prefilled.sources}
         />
       </div>
 
