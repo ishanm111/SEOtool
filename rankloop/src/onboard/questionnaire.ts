@@ -1,0 +1,270 @@
+import type { BusinessType } from '../config'
+
+/**
+ * The questions only the business can answer.
+ *
+ * The recommender refuses to invent a price, a warranty, a response time or a
+ * credential — it emits a visible `[[FILL: …]]` marker instead, and that marker
+ * blocks publication. Most of a fix list ends up waiting on a handful of facts
+ * that one conversation with the client would settle.
+ *
+ * So these are asked once, up front, and every answer removes a specific
+ * placeholder. Nothing here is industry-specific: no question assumes a trade, a
+ * product, or a country, and every one of them is optional — a half-filled
+ * questionnaire is strictly better than none.
+ *
+ * `resolves` is shown in the interface. An operator who can see that a question
+ * turns 8 blocked recommendations into publishable copy actually asks it.
+ */
+
+export type QuestionKind = 'text' | 'textarea' | 'select'
+
+export type Question = {
+  key: string
+  label: string
+  /** Why it is being asked, in the words used with the client. */
+  help: string
+  placeholder?: string
+  kind: QuestionKind
+  options?: { value: string; label: string }[]
+  /** Which business types the question makes sense for. */
+  appliesTo: BusinessType[] | 'both'
+  /** What answering it unblocks. Empty when it only informs the operator. */
+  resolves: string
+  /**
+   * A claim that becomes legally binding once published. Marked so the
+   * interface can say plainly that the business has to confirm it in writing.
+   */
+  mustBeConfirmed?: boolean
+}
+
+export type QuestionGroup = {
+  title: string
+  intro: string
+  questions: Question[]
+}
+
+export const QUESTIONNAIRE: QuestionGroup[] = [
+  {
+    title: 'Where and when',
+    intro:
+      'Structured data needs a real address or an explicit service area. Without it the engines cannot place the business anywhere.',
+    questions: [
+      {
+        key: 'street_address',
+        label: 'Street address',
+        help: 'Leave blank if the business only travels to customers and has no address a customer could visit.',
+        placeholder: '123 Main St',
+        kind: 'text',
+        appliesTo: ['local_service'],
+        resolves: 'the street address in LocalBusiness structured data',
+      },
+      {
+        key: 'postal_code',
+        label: 'ZIP / postal code',
+        help: 'Part of the same structured data block. Engines use it to decide which searches a business is local to.',
+        placeholder: '77502',
+        kind: 'text',
+        appliesTo: ['local_service'],
+        resolves: 'the postal code in LocalBusiness structured data',
+      },
+      {
+        key: 'opening_hours',
+        label: 'Opening hours',
+        help: 'Written the way you would say them out loud. "Closed Sunday" is worth stating — it is a question customers ask.',
+        placeholder: 'Mon–Fri 8am–6pm, Sat 9am–2pm, closed Sunday',
+        kind: 'textarea',
+        appliesTo: 'both',
+        resolves: 'the opening-hours answer on every new location page',
+      },
+      {
+        key: 'response_time',
+        label: 'How quickly do you normally get to a customer?',
+        help: 'The single most repeated missing fact. Give the honest typical case and the worst case you would still stand behind.',
+        placeholder: 'Usually the same day, and always within 48 hours',
+        kind: 'textarea',
+        appliesTo: ['local_service'],
+        resolves: 'the response-time sentence in body copy and on every new page',
+      },
+      {
+        key: 'access_notes',
+        label: 'Anything a first-time visitor should know',
+        help: 'Parking, which door to use, a hard-to-find entrance. Only relevant if customers come to you.',
+        placeholder: 'Free parking at the rear; entrance is on the side street',
+        kind: 'textarea',
+        appliesTo: 'both',
+        resolves: 'the access note on new location pages',
+      },
+    ],
+  },
+  {
+    title: 'What it costs, and what you promise',
+    intro:
+      'Nothing here is ever invented. A wrong price or a warranty the business does not offer is a legal problem on their website, not a style one.',
+    questions: [
+      {
+        key: 'price_band',
+        label: 'Rough price band',
+        help: 'The bracket search engines display. Not a price — just where the business sits.',
+        kind: 'select',
+        options: [
+          { value: '', label: 'Not sure / skip' },
+          { value: '$', label: '$ — budget' },
+          { value: '$$', label: '$$ — mid-range' },
+          { value: '$$$', label: '$$$ — premium' },
+          { value: '$$$$', label: '$$$$ — high end' },
+        ],
+        appliesTo: 'both',
+        resolves: 'the price range in structured data',
+      },
+      {
+        key: 'price_detail',
+        label: 'What does a typical job or order cost, and what changes the price?',
+        help: 'A range is fine, and honest ranges outperform "call for a quote" — it is one of the questions customers ask an AI directly.',
+        placeholder: 'Most call-outs land between $120 and $260; the difference is usually the part',
+        kind: 'textarea',
+        appliesTo: 'both',
+        resolves: 'the pricing answer on new pages and buying guides',
+        mustBeConfirmed: true,
+      },
+      {
+        key: 'currency',
+        label: 'Currency',
+        help: 'Product structured data will not validate without it.',
+        placeholder: 'USD',
+        kind: 'text',
+        appliesTo: ['ecommerce'],
+        resolves: 'the currency code in Product structured data',
+      },
+      {
+        key: 'warranty',
+        label: 'Warranty or guarantee',
+        help: 'In the exact words the business would stand behind. Left blank, every page that would mention one stays blocked.',
+        placeholder: '90 days on labour, manufacturer warranty on parts',
+        kind: 'textarea',
+        appliesTo: 'both',
+        resolves: 'the warranty answer on new pages',
+        mustBeConfirmed: true,
+      },
+      {
+        key: 'returns',
+        label: 'Returns window and conditions',
+        help: 'What a customer actually gets, including anything that voids it.',
+        placeholder: '30 days unworn, in the original box, buyer pays return postage',
+        kind: 'textarea',
+        appliesTo: ['ecommerce'],
+        resolves: 'the returns answer on new pages',
+        mustBeConfirmed: true,
+      },
+    ],
+  },
+  {
+    title: 'Why a customer should pick them',
+    intro:
+      'Concrete numbers are the biggest measured lever in AI visibility, and superlatives measure neutral-to-negative. Anything here replaces a "best in town" the tool would otherwise strike out.',
+    questions: [
+      {
+        key: 'founded_year',
+        label: 'Year the business started',
+        help: 'Turns "trusted for years" into a number, which is the whole point.',
+        placeholder: '2011',
+        kind: 'text',
+        appliesTo: 'both',
+        resolves: 'a verifiable fact in place of struck-out superlatives',
+      },
+      {
+        key: 'credentials',
+        label: 'Licences, certifications and insurance',
+        help: 'Anything with a number or an issuing body. Vague trust language is worth nothing; a licence number is worth a lot.',
+        placeholder: 'TDLR licence #12345, fully insured, factory-certified for Bosch',
+        kind: 'textarea',
+        appliesTo: 'both',
+        resolves: 'credibility claims that would otherwise be blocked',
+        mustBeConfirmed: true,
+      },
+      {
+        key: 'proof_points',
+        label: 'Numbers you can prove',
+        help: 'Jobs completed, years running, response times, units shipped. Each one is a statistic the engines can quote.',
+        placeholder: '4,000 repairs since 2011; 92% fixed on the first visit',
+        kind: 'textarea',
+        appliesTo: 'both',
+        resolves: 'statistics in rewritten body copy',
+        mustBeConfirmed: true,
+      },
+      {
+        key: 'must_not_claim',
+        label: 'Anything the tool must never claim',
+        help: 'Services they do not offer, areas they will not travel to, promises they cannot keep. This is a guardrail, not a wish list.',
+        placeholder: 'We do not do commercial work, and never claim 24/7',
+        kind: 'textarea',
+        appliesTo: 'both',
+        resolves: '',
+      },
+    ],
+  },
+  {
+    title: 'Focus and competition',
+    intro:
+      'Shapes what gets asked and who gets crawled. Detection reads what the site happens to mention, which is rarely what the business actually wants to sell.',
+    questions: [
+      {
+        key: 'priority_offerings',
+        label: 'What do they most want to be found for?',
+        help: 'The two or three that pay best, not the full list. These get weighted in the question set.',
+        placeholder: 'Refrigerator repair, same-day washer repair',
+        kind: 'textarea',
+        appliesTo: 'both',
+        // Read by the operator when reviewing the generated question set rather
+        // than consumed automatically — saying otherwise would overstate it.
+        resolves: '',
+      },
+      {
+        key: 'known_competitors',
+        label: 'Who do they lose work to?',
+        help: 'Website addresses, comma-separated. These get crawled and measured alongside whoever the engines name, so a rival the engines never cite is still profiled.',
+        placeholder: 'rivalcompany.com, anotherone.com',
+        kind: 'textarea',
+        appliesTo: 'both',
+        resolves: 'the competitor crawl — these get profiled on every run',
+      },
+    ],
+  },
+]
+
+/** The questions that make sense for one kind of business. */
+export function questionsFor(businessType: BusinessType): QuestionGroup[] {
+  return QUESTIONNAIRE.map((group) => ({
+    ...group,
+    questions: group.questions.filter(
+      (q) => q.appliesTo === 'both' || q.appliesTo.includes(businessType),
+    ),
+  })).filter((group) => group.questions.length > 0)
+}
+
+export const ALL_QUESTION_KEYS = QUESTIONNAIRE.flatMap((g) => g.questions.map((q) => q.key))
+
+export function questionByKey(key: string): Question | undefined {
+  for (const g of QUESTIONNAIRE) {
+    const hit = g.questions.find((q) => q.key === key)
+    if (hit) return hit
+  }
+  return undefined
+}
+
+/**
+ * The answers, as the recommender consumes them.
+ *
+ * A blank answer is dropped rather than stored as an empty string, so every
+ * consumer can treat "absent" as the single meaning of "not answered".
+ */
+export type ClientFacts = Record<string, string>
+
+export function factsFromEntries(entries: { key: string; value: string }[]): ClientFacts {
+  const out: ClientFacts = {}
+  for (const { key, value } of entries) {
+    const trimmed = value.trim()
+    if (trimmed) out[key] = trimmed
+  }
+  return out
+}

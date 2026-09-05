@@ -1,5 +1,6 @@
 import { getCompetitors } from '@/lib/queries'
 import { NoClient } from '../_components/no-client'
+import { NeedsRun } from '../_components/ui'
 import { activeClient } from '@/lib/active-client'
 
 export const dynamic = 'force-dynamic'
@@ -18,15 +19,15 @@ function GapRow({
   note?: string
 }) {
   return (
-    <tr className={worse ? 'bg-red-50' : undefined}>
+    <tr className={worse ? 'bg-rose-soft' : undefined}>
       <td className="px-4 py-3">
         <div className="font-medium">{label}</div>
-        {note && <div className="text-xs text-zinc-500">{note}</div>}
+        {note && <div className="text-xs text-ink-3">{note}</div>}
       </td>
-      <td className={`px-4 py-3 text-right tabular-nums font-semibold ${worse ? 'text-red-600' : 'text-zinc-900'}`}>
+      <td className={`px-4 py-3 text-right tabular-nums font-semibold ${worse ? 'text-rose' : 'text-ink'}`}>
         {mine}
       </td>
-      <td className="px-4 py-3 text-right tabular-nums text-zinc-600">{theirs}</td>
+      <td className="px-4 py-3 text-right tabular-nums text-ink-2">{theirs}</td>
     </tr>
   )
 }
@@ -43,43 +44,41 @@ export default async function CompetitorsPage() {
   return (
     <div className="space-y-8">
       <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Competitors</h1>
-        <p className="mt-1 text-sm text-zinc-500">
+        <h1 className="display text-3xl">Competitors</h1>
+        <p className="mt-1 text-sm text-ink-3">
           Built by crawling the exact pages the AI engines cited. This is what winning looks like,
           measured rather than guessed.
         </p>
       </div>
 
       {rows.length === 0 ? (
-        <div className="rounded-lg border border-amber-200 bg-amber-50 p-5 text-sm text-amber-800">
-          Nothing mined yet. Run{' '}
-          <code className="rounded bg-amber-100 px-1.5 py-0.5 text-xs">
-            npx tsx src/scripts/mine-competitors.ts
-          </code>
-        </div>
+        <NeedsRun
+          what="No competitors profiled yet"
+          step="Competitors are found from the domains the engines cited, so the engines have to be asked first."
+        />
       ) : (
         <>
           {cityLeaders.length > 0 && (
-            <section className="rounded-lg border border-red-200 bg-red-50 p-5">
-              <h2 className="text-sm font-semibold text-red-800">
+            <section className="rounded-lg border border-rose/25 bg-rose-soft p-5">
+              <h2 className="text-sm font-semibold text-rose">
                 {cityLeaders.length} of {locals.length} competitors AI recommends are built on location pages
               </h2>
               <table className="mt-3 w-full text-sm">
-                <tbody className="divide-y divide-red-100">
+                <tbody className="divide-y divide-rose/20">
                   {cityLeaders.map((c) => {
                     const pct = c.pageCount ? Math.round((c.cityPageCount / c.pageCount) * 100) : 0
                     return (
                       <tr key={c.id}>
                         <td className="py-2 font-medium">{c.domain}</td>
-                        <td className="py-2 text-right tabular-nums text-red-800">
+                        <td className="py-2 text-right tabular-nums text-rose">
                           {c.cityPageCount} of {c.pageCount} pages
                         </td>
                         <td className="w-40 py-2 pl-4">
-                          <div className="h-2 w-full rounded-full bg-red-100">
-                            <div className="h-2 rounded-full bg-red-500" style={{ width: `${pct}%` }} />
+                          <div className="h-2 w-full rounded-full bg-rose-soft">
+                            <div className="h-2 rounded-full bg-rose" style={{ width: `${pct}%` }} />
                           </div>
                         </td>
-                        <td className="w-14 py-2 text-right tabular-nums text-xs text-red-700">{pct}%</td>
+                        <td className="w-14 py-2 text-right tabular-nums text-xs text-rose">{pct}%</td>
                       </tr>
                     )
                   })}
@@ -87,7 +86,7 @@ export default async function CompetitorsPage() {
                     <td className="py-2">{client.domain}</td>
                     <td className="py-2 text-right tabular-nums">0 of {client.pageCount} pages</td>
                     <td className="w-40 py-2 pl-4">
-                      <div className="h-2 w-full rounded-full bg-red-100" />
+                      <div className="h-2 w-full rounded-full bg-rose-soft" />
                     </td>
                     <td className="w-14 py-2 text-right tabular-nums text-xs">0%</td>
                   </tr>
@@ -96,24 +95,24 @@ export default async function CompetitorsPage() {
             </section>
           )}
 
-          <section className="overflow-hidden rounded-lg border border-zinc-200 bg-white">
-            <div className="border-b border-zinc-200 px-4 py-3">
-              <h2 className="text-sm font-semibold uppercase tracking-wide text-zinc-500">
+          <section className="overflow-hidden card">
+            <div className="border-b border-line px-4 py-3">
+              <h2 className="eyebrow">
                 The gap — vs {localAvg.total} local rivals
               </h2>
-              <p className="mt-0.5 text-xs text-zinc-500">
+              <p className="mt-0.5 text-xs text-ink-3">
                 National chains excluded; averaging them in produces a target no local business could hit.
               </p>
             </div>
             <table className="w-full text-sm">
-              <thead className="border-b border-zinc-200 text-xs uppercase tracking-wide text-zinc-500">
+              <thead className="border-b border-line text-xs uppercase tracking-wide text-ink-3">
                 <tr>
                   <th className="px-4 py-2 text-left">Metric</th>
                   <th className="px-4 py-2 text-right">Client</th>
                   <th className="px-4 py-2 text-right">Local rivals</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-zinc-100">
+              <tbody className="divide-y divide-line">
                 <GapRow label="Total pages" mine={client.pageCount} theirs={localAvg.pageCount} worse={false} />
                 <GapRow
                   label="Local city pages"
@@ -161,46 +160,46 @@ export default async function CompetitorsPage() {
           </section>
 
           <section className="space-y-3">
-            <h2 className="text-lg font-semibold tracking-tight">Every domain AI cited</h2>
+            <h2 className="display text-xl">Every domain AI cited</h2>
             {rows.map((c) => (
-              <details key={c.id} className="rounded-lg border border-zinc-200 bg-white">
-                <summary className="flex cursor-pointer flex-wrap items-center gap-3 px-5 py-3 text-sm hover:bg-zinc-50">
+              <details key={c.id} className="card">
+                <summary className="flex cursor-pointer flex-wrap items-center gap-3 px-5 py-3 text-sm hover:bg-sink">
                   <span className="font-medium">{c.domain}</span>
                   {c.isNational && (
-                    <span className="rounded bg-zinc-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-zinc-500">
+                    <span className="rounded bg-sink px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-ink-3">
                       national chain
                     </span>
                   )}
-                  <span className="text-zinc-500">
+                  <span className="text-ink-3">
                     cited {c.citationCount}x
                     {c.mentionCount > 0 && ` · named ${c.mentionCount}x`}
                   </span>
-                  <span className="ml-auto text-zinc-500">
+                  <span className="ml-auto text-ink-3">
                     {c.ok ? `${c.pageCount} pages · ${c.cityPageCount} city · ${c.faqBlockCount} FAQs` : `failed: ${c.error}`}
                   </span>
                 </summary>
-                <div className="grid gap-4 border-t border-zinc-100 px-5 py-4 text-sm sm:grid-cols-2">
+                <div className="grid gap-4 border-t border-line px-5 py-4 text-sm sm:grid-cols-2">
                   <div>
-                    <div className="text-[10px] font-bold uppercase tracking-wide text-zinc-500">Schema found</div>
-                    <p className="mt-1 text-zinc-700">
-                      {c.schemaList.length > 0 ? c.schemaList.join(', ') : <em className="text-zinc-400">none</em>}
+                    <div className="eyebrow">Schema found</div>
+                    <p className="mt-1 text-ink-2">
+                      {c.schemaList.length > 0 ? c.schemaList.join(', ') : <em className="text-ink-3">none</em>}
                     </p>
-                    <div className="mt-3 text-[10px] font-bold uppercase tracking-wide text-zinc-500">Phones</div>
-                    <p className="mt-1 text-zinc-700">
-                      {c.phoneList.length > 0 ? c.phoneList.join(' · ') : <em className="text-zinc-400">none found</em>}
+                    <div className="mt-3 text-[10px] font-bold uppercase tracking-wide text-ink-3">Phones</div>
+                    <p className="mt-1 text-ink-2">
+                      {c.phoneList.length > 0 ? c.phoneList.join(' · ') : <em className="text-ink-3">none found</em>}
                     </p>
-                    <div className="mt-3 text-[10px] font-bold uppercase tracking-wide text-zinc-500">Content</div>
-                    <p className="mt-1 text-zinc-700">
+                    <div className="mt-3 text-[10px] font-bold uppercase tracking-wide text-ink-3">Content</div>
+                    <p className="mt-1 text-ink-2">
                       {c.statsPerThousand} stats/1k words · reading ease {c.avgReadability} ·{' '}
                       {c.superlativeCount} superlatives
                     </p>
                   </div>
                   <div>
-                    <div className="text-[10px] font-bold uppercase tracking-wide text-zinc-500">
+                    <div className="eyebrow">
                       City pages ({c.cityPagesList.length} shown)
                     </div>
-                    <ul className="mt-1 max-h-56 space-y-0.5 overflow-auto text-xs text-zinc-600">
-                      {c.cityPagesList.length === 0 && <li className="text-zinc-400">none</li>}
+                    <ul className="mt-1 max-h-56 space-y-0.5 overflow-auto text-xs text-ink-2">
+                      {c.cityPagesList.length === 0 && <li className="text-ink-3">none</li>}
                       {c.cityPagesList.map((u) => (
                         <li key={u} className="truncate">
                           <a href={u} target="_blank" rel="noreferrer" className="hover:underline">
@@ -214,7 +213,7 @@ export default async function CompetitorsPage() {
               </details>
             ))}
             {nationals.length > 0 && (
-              <p className="text-xs text-zinc-500">
+              <p className="text-xs text-ink-3">
                 National chains excluded from the averages:{' '}
                 {nationals.map((n) => `${n.domain} (${n.pageCount.toLocaleString()} pages)`).join(', ')}
               </p>

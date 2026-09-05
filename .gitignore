@@ -41,3 +41,11 @@ next-env.d.ts
 
 # Working handoff notes — reference the pilot client by name
 HANDOFF.md
+
+# A stray SQLite file the tooling creates at the repo root. The real database
+# lives in rankloop/ and is ignored there.
+data.db
+data.db-*
+
+# Editor and launch configuration, specific to one machine.
+.claude/

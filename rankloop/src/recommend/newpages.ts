@@ -1,6 +1,7 @@
 import type { Recommendation, RecommendInput } from './types'
 import { FILL } from './types'
 import type { Client, ClientLocation } from '../lib/client'
+import type { ClientFacts } from '../onboard/questionnaire'
 import { deriveTrade, isVisitTrade } from '../lib/trade'
 
 /**
@@ -34,7 +35,12 @@ function servicesList(client: Client): string {
  * business whose trade could not be read off its own site, and that decision
  * belongs at the point where generation is refused.
  */
-function locationPage(client: Client, location: ClientLocation, trade: string): { slug: string; html: string; faqs: { q: string; a: string }[] } {
+function locationPage(
+  client: Client,
+  location: ClientLocation,
+  trade: string,
+  facts: ClientFacts,
+): { slug: string; html: string; faqs: { q: string; a: string }[] } {
   const where = `${location.name}${location.region ? `, ${location.region}` : ''}`
   const visit = isVisitTrade(trade)
   const phone = client.primaryPhone ?? FILL('phone number')
@@ -48,11 +54,19 @@ function locationPage(client: Client, location: ClientLocation, trade: string): 
     visit
       ? {
           q: `What are your opening hours?`,
-          a: FILL(`the days and hours you are open, and anything customers in ${location.name} should know about parking or access`),
+          a:
+            [facts.opening_hours, facts.access_notes].filter(Boolean).join(' ') ||
+            FILL(
+              `the days and hours you are open, and anything customers in ${location.name} should know about parking or access`,
+            ),
         }
       : {
           q: `How soon can you help in ${location.name}?`,
-          a: FILL(`typical response time for ${location.name} — e.g. "Usually the same day, and always within 48 hours."`),
+          a:
+            facts.response_time ??
+            FILL(
+              `typical response time for ${location.name} — e.g. "Usually the same day, and always within 48 hours."`,
+            ),
         },
     {
       /**
@@ -62,13 +76,18 @@ function locationPage(client: Client, location: ClientLocation, trade: string): 
        * same failure as inventing a number.
        */
       q: `How much does it cost?`,
-      a: `${FILL(
-        'how you charge — e.g. a call-out fee plus parts and labour, a fixed price per job, or an hourly rate',
-      )} We give you a price before any work starts.`,
+      a: `${
+        facts.price_detail ??
+        FILL(
+          'how you charge — e.g. a call-out fee plus parts and labour, a fixed price per job, or an hourly rate',
+        )
+      } We give you a price before any work starts.`,
     },
     {
       q: `Do you guarantee your work?`,
-      a: FILL('warranty terms — do not publish until the business has confirmed these in writing'),
+      a:
+        facts.warranty ??
+        FILL('warranty terms — do not publish until the business has confirmed these in writing'),
     },
   ]
 
@@ -120,7 +139,11 @@ function locationPage(client: Client, location: ClientLocation, trade: string): 
 }
 
 /** A buying guide for a store — the format AI quotes instead of product pages. */
-function buyingGuide(client: Client, category: string): { slug: string; html: string; faqs: { q: string; a: string }[] } {
+function buyingGuide(
+  client: Client,
+  category: string,
+  facts: ClientFacts,
+): { slug: string; html: string; faqs: { q: string; a: string }[] } {
   const slug = `how-to-choose-${category.replace(/\s+/g, '-')}`
   const cat = titleCase(category)
 
@@ -133,7 +156,7 @@ function buyingGuide(client: Client, category: string): { slug: string; html: st
     },
     {
       q: `How much should I expect to pay for ${category}?`,
-      a: FILL(`honest price range for ${category}, including what changes the price`),
+      a: facts.price_detail ?? FILL(`honest price range for ${category}, including what changes the price`),
     },
     {
       // Not "size or fit" — that is only a question for things you wear. Care and
@@ -148,7 +171,7 @@ function buyingGuide(client: Client, category: string): { slug: string; html: st
     },
     {
       q: `What is your returns policy?`,
-      a: FILL('returns window and conditions — do not publish until confirmed'),
+      a: facts.returns ?? FILL('returns window and conditions — do not publish until confirmed'),
     },
   ]
 
@@ -187,7 +210,7 @@ function faqSchema(faqs: { q: string; a: string }[]) {
 }
 
 export function recommendNewPages(input: RecommendInput): Recommendation[] {
-  const { client, locations, pages } = input
+  const { client, locations, pages, facts = {} } = input
   const out: Recommendation[] = []
 
   /**
@@ -218,7 +241,7 @@ export function recommendNewPages(input: RecommendInput): Recommendation[] {
       if (existingSlugs.includes(key) || existingSlugs.includes(key.replace(/-/g, ''))) continue
       const clash = misleading.find((s) => s.includes(key) || s.includes(key.replace(/-/g, '')))
 
-      const { slug, html, faqs } = locationPage(client, location, trade)
+      const { slug, html, faqs } = locationPage(client, location, trade, facts)
       out.push({
         pageId: null,
         kind: 'new_page',
@@ -240,7 +263,7 @@ export function recommendNewPages(input: RecommendInput): Recommendation[] {
       const key = `how-to-choose-${category.replace(/\s+/g, '-')}`
       if (existingSlugs.includes(key)) continue
 
-      const { slug, html, faqs } = buyingGuide(client, category)
+      const { slug, html, faqs } = buyingGuide(client, category, facts)
       out.push({
         pageId: null,
         kind: 'new_page',

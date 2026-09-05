@@ -277,3 +277,148 @@ export const generatedPages = sqliteTable('generated_pages', {
   schemaJson: text('schema_json').notNull().default(''),
   createdAt: integer('created_at', { mode: 'timestamp' }).$defaultFn(now),
 })
+
+/**
+ * One press of "Start a new run": the ordered pipeline for a single client.
+ *
+ * A run is a row rather than a background variable so it survives a server
+ * restart. A page that reports "running" from memory alone would keep saying so
+ * forever once the process behind it had gone.
+ */
+export const pipelineRuns = sqliteTable('pipeline_runs', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  clientId: integer('client_id').notNull().references(() => clients.id),
+  label: text('label').notNull().default(''),
+  /** queued | running | done | failed | cancelled */
+  status: text('status').notNull().default('queued'),
+  /** The steps asked for, in order, as JSON. Skipped steps still appear. */
+  stepKeys: text('step_keys').notNull().default('[]'),
+  error: text('error'),
+  startedAt: integer('started_at', { mode: 'timestamp' }),
+  finishedAt: integer('finished_at', { mode: 'timestamp' }),
+  createdAt: integer('created_at', { mode: 'timestamp' }).$defaultFn(now),
+})
+
+/** One stage of a run, with the output it produced kept for the operator. */
+export const pipelineSteps = sqliteTable('pipeline_steps', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  runId: integer('run_id').notNull().references(() => pipelineRuns.id),
+  stepKey: text('step_key').notNull(),
+  sortOrder: integer('sort_order').notNull().default(0),
+  /** pending | running | done | failed | skipped */
+  status: text('status').notNull().default('pending'),
+  log: text('log').notNull().default(''),
+  exitCode: integer('exit_code'),
+  startedAt: integer('started_at', { mode: 'timestamp' }),
+  finishedAt: integer('finished_at', { mode: 'timestamp' }),
+})
+
+/**
+ * How to write to a client's own site, so an approved fix can be published
+ * rather than copied out by hand.
+ *
+ * The secret is an application password or an API token — never the client's
+ * own login — so it can be revoked from their side without touching anything
+ * else they own.
+ */
+export const siteCredentials = sqliteTable('site_credentials', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  clientId: integer('client_id').notNull().references(() => clients.id),
+  /** wordpress | shopify */
+  kind: text('kind').notNull(),
+  endpoint: text('endpoint').notNull().default(''),
+  username: text('username').notNull().default(''),
+  secret: text('secret').notNull().default(''),
+  /** untested | ok | failed */
+  status: text('status').notNull().default('untested'),
+  detail: text('detail'),
+  checkedAt: integer('checked_at', { mode: 'timestamp' }),
+  createdAt: integer('created_at', { mode: 'timestamp' }).$defaultFn(now),
+})
+
+/**
+ * Every change written to a client's live site, with the value that was there
+ * before it.
+ *
+ * Recording the previous value is what makes an edit undoable. Without it the
+ * tool could publish a change it has no way to take back, which is not a
+ * position to put an operator in on someone else's website.
+ */
+export const fixApplications = sqliteTable('fix_applications', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  clientId: integer('client_id').notNull().references(() => clients.id),
+  recommendationId: integer('recommendation_id'),
+  pageId: integer('page_id'),
+  targetUrl: text('target_url').notNull().default(''),
+  field: text('field').notNull().default(''),
+  previousValue: text('previous_value'),
+  appliedValue: text('applied_value').notNull().default(''),
+  /** applied | reverted | failed */
+  status: text('status').notNull().default('applied'),
+  error: text('error'),
+  appliedAt: integer('applied_at', { mode: 'timestamp' }).$defaultFn(now),
+})
+
+/**
+ * What the numbers were when a run finished.
+ *
+ * Written once, at the end of a run, and never recomputed. The dashboard always
+ * shows the present; this is the only place that remembers the past, so "we were
+ * named in 0 of 128 answers in September" survives every later run, every
+ * re-crawl and every edit to the site. Recomputing it from live tables would
+ * quietly rewrite history each time anything changed.
+ */
+export const runResults = sqliteTable('run_results', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  runId: integer('run_id').notNull().references(() => pipelineRuns.id),
+  clientId: integer('client_id').notNull().references(() => clients.id),
+  capturedAt: integer('captured_at', { mode: 'timestamp' }).$defaultFn(now),
+
+  answersTotal: integer('answers_total').notNull().default(0),
+  answersNamed: integer('answers_named').notNull().default(0),
+  namedPct: real('named_pct').notNull().default(0),
+  promptsTotal: integer('prompts_total').notNull().default(0),
+
+  pagesRead: integer('pages_read').notNull().default(0),
+  wrongGeoPages: integer('wrong_geo_pages').notNull().default(0),
+
+  findingsTotal: integer('findings_total').notNull().default(0),
+  findingsCritical: integer('findings_critical').notNull().default(0),
+
+  recommendationsTotal: integer('recommendations_total').notNull().default(0),
+  /** Recommendations still carrying a value only the business can confirm. */
+  recommendationsBlocked: integer('recommendations_blocked').notNull().default(0),
+
+  competitorsTotal: integer('competitors_total').notNull().default(0),
+  fixesPublished: integer('fixes_published').notNull().default(0),
+
+  gbpRating: real('gbp_rating'),
+  gbpReviewCount: integer('gbp_review_count'),
+
+  /** The exact file this run produced, so an old report stays reachable. */
+  reportPath: text('report_path'),
+
+  byEngine: text('by_engine').notNull().default('[]'),
+  byMarket: text('by_market').notNull().default('[]'),
+  topCompetitors: text('top_competitors').notNull().default('[]'),
+})
+
+/**
+ * Answers to the intake questionnaire: the things only the business can tell
+ * you.
+ *
+ * The recommender refuses to invent a price, a warranty, a response time or a
+ * credential, and emits a visible placeholder instead. Every row here turns one
+ * of those placeholders into publishable copy — which is the whole reason the
+ * questions get asked.
+ *
+ * Key/value rather than columns because the question set will grow, and a
+ * migration per question would guarantee it never does.
+ */
+export const clientFacts = sqliteTable('client_facts', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  clientId: integer('client_id').notNull().references(() => clients.id),
+  key: text('key').notNull(),
+  value: text('value').notNull().default(''),
+  updatedAt: integer('updated_at', { mode: 'timestamp' }).$defaultFn(now),
+})

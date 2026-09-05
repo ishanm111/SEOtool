@@ -1,6 +1,7 @@
 import type { Recommendation, RecommendInput, PageRow } from './types'
 import { FILL, SUPERLATIVE_PATTERN } from './types'
 import type { Client, ClientLocation } from '../lib/client'
+import type { ClientFacts } from '../onboard/questionnaire'
 import { readingEase } from '../ingest/score'
 
 /**
@@ -54,12 +55,37 @@ function splitLongSentences(text: string): string {
  * Replaces empty superlatives with a marker for a real fact.
  * "the best appliance repair" -> "[[FILL: …]] appliance repair"
  */
-function replaceSuperlatives(text: string): string {
-  return text.replace(SUPERLATIVE_PATTERN, () => FILL('replace with a verifiable fact — a number, a rating, a timeframe'))
+/**
+ * The facts the business gave, offered as candidates rather than substituted.
+ *
+ * A proof point is true about the business but not necessarily true *here* —
+ * dropping "92% fixed on the first visit" into a paragraph about opening hours
+ * produces a sentence nobody would write. So the answers travel with the
+ * placeholder as suggestions, which leaves the judgement with a person while
+ * making the placeholder a copy-and-paste rather than a phone call.
+ */
+function suggestionsFrom(facts: ClientFacts): string {
+  const candidates = [
+    facts.proof_points,
+    facts.founded_year && `trading since ${facts.founded_year}`,
+    facts.credentials,
+  ].filter((v): v is string => Boolean(v))
+  return candidates.length > 0 ? ` — you told us: ${candidates.join('; ')}` : ''
+}
+
+function replaceSuperlatives(text: string, facts: ClientFacts): string {
+  const suggestions = suggestionsFrom(facts)
+  return text.replace(SUPERLATIVE_PATTERN, () =>
+    FILL(`replace with a verifiable fact — a number, a rating, a timeframe${suggestions}`),
+  )
 }
 
 /** A sentence that states what the business does, for a page that never says it. */
-function directAnswer(client: Client, location: ClientLocation | null): string {
+function directAnswer(
+  client: Client,
+  location: ClientLocation | null,
+  facts: ClientFacts,
+): string {
   const offering = client.offerings[0] ?? 'our services'
   const where = location ? ` across ${location.name}${location.region ? `, ${location.region}` : ''}` : ''
   const phone = client.primaryPhone
@@ -68,7 +94,9 @@ function directAnswer(client: Client, location: ClientLocation | null): string {
 
   return client.businessType === 'ecommerce'
     ? `${client.name} sells ${offering}. ${FILL('one sentence on what makes the range different — how it is made, what it is made of, or what is guaranteed')}`
-    : `${client.name} provides ${offering}${where}, usually ${FILL('typical response time, e.g. "the same day"')}.${phone}`
+    : `${client.name} provides ${offering}${where}, usually ${
+        facts.response_time ?? FILL('typical response time, e.g. "the same day"')
+      }.${phone}`
 }
 
 function locationFor(page: PageRow, locations: ClientLocation[]): ClientLocation | null {
@@ -77,7 +105,7 @@ function locationFor(page: PageRow, locations: ClientLocation[]): ClientLocation
 }
 
 export function recommendCopy(input: RecommendInput): Recommendation[] {
-  const { client, locations, pages, paragraphs } = input
+  const { client, locations, pages, paragraphs, facts = {} } = input
   const out: Recommendation[] = []
   const pageById = new Map(pages.map((p) => [p.id, p]))
 
@@ -93,7 +121,7 @@ export function recommendCopy(input: RecommendInput): Recommendation[] {
     let priority = 0
 
     if (para.superlativeCount > 0) {
-      proposed = replaceSuperlatives(proposed)
+      proposed = replaceSuperlatives(proposed, facts)
       reasons.push(
         `${para.superlativeCount} superlative${para.superlativeCount > 1 ? 's' : ''} carry no information and measure as neutral-to-negative for AI visibility`,
       )
@@ -113,7 +141,7 @@ export function recommendCopy(input: RecommendInput): Recommendation[] {
 
     if (para.statCount === 0 && !para.hasCitation) {
       proposed = `${proposed.replace(/\s+$/, '')} ${FILL(
-        'add one concrete figure here — a count, a timeframe, a price range, a number of years',
+        `add one concrete figure here — a count, a timeframe, a price range, a number of years${suggestionsFrom(facts)}`,
       )}`
       reasons.push('it contains no numbers and cites no source, the single biggest measured lever (+40%)')
       priority = Math.max(priority, 80)
@@ -146,7 +174,7 @@ export function recommendCopy(input: RecommendInput): Recommendation[] {
       kind: 'copy',
       target: `${page.url} — opening paragraph`,
       currentValue: page.text.split(/\s+/).slice(0, 40).join(' ') + '…',
-      proposedValue: directAnswer(client, locationFor(page, locations)),
+      proposedValue: directAnswer(client, locationFor(page, locations), facts),
       reason:
         'The page does not say what the business does in the first 100 words. AI engines extract from the top of a page, so a slow opening rarely gets quoted.',
       priority: 74,

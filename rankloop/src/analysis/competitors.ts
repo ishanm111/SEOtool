@@ -9,7 +9,7 @@ import { countStats, countSuperlatives, readingEase, wordCount } from '../ingest
  * comparable. Deliberately shallow and polite: sitemap plus a handful of pages.
  */
 
-const UA = 'RankLoop/0.1 (competitive research; respects robots)'
+const UA = 'SEOmyze/0.1 (competitive research; respects robots)'
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
 
 /**
