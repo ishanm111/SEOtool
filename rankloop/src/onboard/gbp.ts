@@ -25,6 +25,15 @@ export type GbpReading = {
   serviceArea: string | null
   website: string | null
   phone: string | null
+  /**
+   * Whether the Maps listing itself was actually opened and read.
+   *
+   * False means every null above is "not looked at", not "looked at and
+   * absent". The difference matters: "no website on the listing" is a finding
+   * that changes what the client is told to do, and reporting it because a
+   * share link went to Search instead would be inventing it.
+   */
+  readListing: boolean
   /** What could not be read, in words an operator can act on. */
   warnings: string[]
 }
@@ -39,6 +48,7 @@ const empty = (url: string, warning: string): GbpReading => ({
   serviceArea: null,
   website: null,
   phone: null,
+  readListing: false,
   warnings: [warning],
 })
 
@@ -51,13 +61,99 @@ function toNumber(raw: string | null | undefined): number | null {
   return Number.isFinite(n) ? n : null
 }
 
+/**
+ * The hosts Google hands out when somebody presses Share.
+ *
+ * There is more than one, and which one you get depends on where you pressed
+ * it: Maps gives `maps.app.goo.gl`, the listing in Search gives `share.google`,
+ * and both are the same listing. Rejecting either of them tells an operator
+ * their perfectly good link is wrong.
+ */
+const GOOGLE_SHORTENERS = new Set(['share.google', 'maps.app.goo.gl', 'goo.gl', 'g.co'])
+
 export function looksLikeGoogleProfile(url: string): boolean {
   try {
-    const host = new URL(url).hostname
-    return /(^|\.)google\.[a-z.]+$/.test(host) || host === 'maps.app.goo.gl' || host === 'goo.gl'
+    const host = new URL(url).hostname.replace(/^www\./, '')
+    // `google.com` and friends, plus `share.google` — where google is the TLD
+    // itself and the earlier "google-dot-something" test never matched.
+    return (
+      GOOGLE_SHORTENERS.has(host) ||
+      host === 'google' ||
+      /(^|\.)google\.[a-z.]+$/.test(host) ||
+      host.endsWith('.share.google')
+    )
   } catch {
     return false
   }
+}
+
+const isShortened = (url: URL) =>
+  GOOGLE_SHORTENERS.has(url.hostname.replace(/^www\./, ''))
+
+type Resolved = {
+  /** Where the link actually goes. */
+  url: string
+  /** The listing's own name, when the destination carries one. */
+  name: string | null
+  /** True when it landed on a Maps place rather than a search results page. */
+  isPlace: boolean
+}
+
+/**
+ * Follows a shortened Google link to whatever it really points at.
+ *
+ * Done with a plain fetch rather than the browser: it is one request, and it
+ * decides which page the browser should open, so paying for a browser launch
+ * before knowing that would be wasteful.
+ *
+ * A share link from Maps lands on a Maps place. A share link copied from a
+ * listing in Google Search lands on a Search results URL instead — which
+ * carries the business's exact name in `q`, and that is worth having even
+ * though the page itself cannot be read.
+ */
+async function resolveProfileUrl(raw: string): Promise<Resolved> {
+  const initial = new URL(raw)
+  if (!isShortened(initial)) {
+    return { url: raw, name: null, isPlace: initial.pathname.includes('/maps/place/') }
+  }
+
+  const res = await fetch(raw, {
+    redirect: 'follow',
+    headers: {
+      'user-agent':
+        'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36',
+      'accept-language': 'en-US,en;q=0.9',
+    },
+  })
+
+  const final = new URL(res.url)
+  return {
+    url: res.url,
+    name: final.searchParams.get('q'),
+    isPlace: final.pathname.includes('/maps/place/'),
+  }
+}
+
+/** Loose enough for punctuation and suffixes, strict enough to catch a different business. */
+function namesAgree(a: string, b: string): boolean {
+  const norm = (s: string) =>
+    s
+      .toLowerCase()
+      .replace(/[^a-z0-9 ]/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim()
+  const x = norm(a)
+  const y = norm(b)
+  if (!x || !y) return false
+  if (x.includes(y) || y.includes(x)) return true
+
+  // Otherwise most of the words have to be shared, which rules out the
+  // similarly-named rivals a name search turns up.
+  const xs = new Set(x.split(' ').filter((w) => w.length > 2))
+  const ys = new Set(y.split(' ').filter((w) => w.length > 2))
+  if (xs.size === 0 || ys.size === 0) return false
+  const shared = [...xs].filter((w) => ys.has(w)).length
+  return shared / Math.min(xs.size, ys.size) >= 0.75
 }
 
 export async function readGoogleProfile(rawUrl: string, timeoutMs = 30_000): Promise<GbpReading> {
@@ -65,6 +161,50 @@ export async function readGoogleProfile(rawUrl: string, timeoutMs = 30_000): Pro
   if (!url) return empty(url, 'No Google profile link was given.')
   if (!looksLikeGoogleProfile(url)) {
     return empty(url, 'That link is not a Google Maps or Google Business Profile address.')
+  }
+
+  /**
+   * A shortened link has to be followed before anything else, because where it
+   * lands decides what can be read. Maps share links land on a place page;
+   * links shared from a listing in Google Search land on a Search results URL,
+   * which Google serves a robot check for rather than a page.
+   */
+  let resolved: Resolved
+  try {
+    resolved = await resolveProfileUrl(url)
+  } catch (err) {
+    return empty(
+      url,
+      `That link could not be followed: ${err instanceof Error ? err.message : String(err)}`,
+    )
+  }
+
+  if (!resolved.isPlace) {
+    /**
+     * Not a Maps listing. The business name is still recovered — it is the name
+     * Google itself holds, which is the one the engines match against — but the
+     * rating is not invented from a name search: doing that returned three
+     * similarly-named businesses in a different state, and attaching one of
+     * those to a client would quietly corrupt every later comparison.
+     */
+    return {
+      url,
+      name: resolved.name,
+      rating: null,
+      reviewCount: null,
+      category: null,
+      address: null,
+      serviceArea: null,
+      website: null,
+      phone: null,
+      readListing: false,
+      warnings: [
+        resolved.name
+          ? `This link opens Google Search rather than a Maps listing, so only the name — "${resolved.name}" — could be read from it.`
+          : 'This link opens Google Search rather than a Maps listing, so nothing could be read from it.',
+        'For the rating and review count, open the business in Google Maps, press Share there, and paste that link instead. Or type both in below.',
+      ],
+    }
   }
 
   let browser
@@ -87,8 +227,10 @@ export async function readGoogleProfile(rawUrl: string, timeoutMs = 30_000): Pro
     const page = await context.newPage()
 
     // hl/gl pin the page to English and US formatting, so "1,234 reviews"
-    // parses the same way wherever the operator happens to be.
-    const target = new URL(url)
+    // parses the same way wherever the operator happens to be. Applied to the
+    // resolved address, never the short one — query parameters on a shortener
+    // are not carried through the redirect.
+    const target = new URL(resolved.url)
     target.searchParams.set('hl', 'en')
     target.searchParams.set('gl', 'us')
 
@@ -108,6 +250,38 @@ export async function readGoogleProfile(rawUrl: string, timeoutMs = 30_000): Pro
     const warnings: string[] = []
 
     const name = (await page.locator('h1').first().textContent().catch(() => null))?.trim() || null
+
+    /**
+     * Maps answers an ambiguous place link with a list of candidates rather than
+     * a page, and the top of that list is regularly a different business in a
+     * different state. Nothing is read from a list: a rating taken from the
+     * wrong listing would flow into the competitive comparison and change what
+     * the client is told to do.
+     */
+    const isResultsList =
+      (await page.locator('[role="feed"]').count().catch(() => 0)) > 0 || name === 'Results'
+    if (isResultsList) {
+      await context.close()
+      return {
+        ...empty(url, 'That link opens a list of businesses rather than one listing.'),
+        name: resolved.name,
+        warnings: [
+          'That link opens a list of businesses rather than one listing, so nothing was read from it — the top of such a list is often a different business entirely.',
+          'Open the exact listing in Google Maps, press Share, and paste that link. Or type the rating and review count in below.',
+        ],
+      }
+    }
+
+    /**
+     * When the short link told us the name, the page has to agree with it.
+     * Maps will happily resolve a link to a neighbouring business, and a wrong
+     * listing attached to a client is worse than no listing at all.
+     */
+    if (resolved.name && name && !namesAgree(resolved.name, name)) {
+      warnings.push(
+        `The link named "${resolved.name}" but the listing that opened is "${name}". Check this is the right business before saving.`,
+      )
+    }
 
     /**
      * The rating comes from the star image's accessibility label rather than a
@@ -196,7 +370,19 @@ export async function readGoogleProfile(rawUrl: string, timeoutMs = 30_000): Pro
     }
 
     await context.close()
-    return { url, name, rating, reviewCount, category, address, serviceArea, website, phone, warnings }
+    return {
+      url,
+      name,
+      rating,
+      reviewCount,
+      category,
+      address,
+      serviceArea,
+      website,
+      phone,
+      readListing: true,
+      warnings,
+    }
   } catch (err) {
     return empty(url, `The profile could not be read: ${err instanceof Error ? err.message : String(err)}`)
   } finally {

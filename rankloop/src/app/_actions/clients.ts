@@ -24,7 +24,15 @@ import { readAnswers } from '@/lib/read-answers'
 
 export type OnboardState =
   | { phase: 'idle' }
-  | { phase: 'error'; message: string }
+  /**
+   * A rejected submission carries back everything that was typed.
+   *
+   * React clears an uncontrolled field once a form action finishes, so without
+   * this a validation error threw away the operator's work — including a
+   * questionnaire they had just spent ten minutes on. `attempt` changes on
+   * every failure so the form can be remounted around the returned values.
+   */
+  | { phase: 'error'; message: string; values?: Record<string, string>; attempt?: number }
   | {
       phase: 'review'
       detection: Detection
@@ -58,7 +66,7 @@ export async function inspectSite(
     return {
       phase: 'error',
       message:
-        'The Google profile link should be a Google Maps address — open the listing, press Share, and copy the link.',
+        'That is not a Google link. Open the business in Google Maps or in Google Search, press Share, and paste what it gives you — both a maps.app.goo.gl and a share.google address work.',
     }
   }
 
@@ -104,18 +112,36 @@ const listOf = (raw: FormDataEntryValue | null): string[] =>
     .map((s) => s.trim())
     .filter(Boolean)
 
+/** Everything typed into the review form, so a rejection can hand it straight back. */
+function submittedValues(formData: FormData): Record<string, string> {
+  const out: Record<string, string> = {}
+  for (const [key, value] of formData.entries()) {
+    // The detection blob is passed through a hidden field and re-rendered from
+    // state; echoing it back would double the size of every error response.
+    if (key === 'detection' || typeof value !== 'string') continue
+    out[key] = value
+  }
+  return out
+}
+
 export async function saveClient(
-  _prev: OnboardState,
+  prev: OnboardState,
   formData: FormData,
 ): Promise<OnboardState> {
+  const attempt = (prev.phase === 'error' ? prev.attempt ?? 0 : 0) + 1
+  const values = submittedValues(formData)
+  const reject = (message: string): OnboardState => ({
+    phase: 'error',
+    message,
+    values,
+    attempt,
+  })
+
   let detection: Detection
   try {
     detection = JSON.parse(String(formData.get('detection') ?? '')) as Detection
   } catch {
-    return {
-      phase: 'error',
-      message: 'The detected details were lost. Start again from the website address.',
-    }
+    return reject('The detected details were lost. Start again from the website address.')
   }
 
   const businessType =
@@ -144,13 +170,11 @@ export async function saveClient(
           : null,
   }
 
-  if (!draft.name) return { phase: 'error', message: 'The business needs a name.' }
+  if (!draft.name) return reject('The business needs a name.')
   if (businessType === 'local_service' && draft.states.length === 0) {
-    return {
-      phase: 'error',
-      message:
-        'A local business needs at least one state it serves — that is what decides which place names count as wrong.',
-    }
+    return reject(
+      'A local business needs at least one state it serves — that is what decides which place names count as wrong.',
+    )
   }
 
   let clientId: number
@@ -160,7 +184,7 @@ export async function saveClient(
     // during onboarding and then lost is worse than one never asked.
     saveFacts(db, clientId, readAnswers(formData))
   } catch (err) {
-    return { phase: 'error', message: err instanceof Error ? err.message : String(err) }
+    return reject(err instanceof Error ? err.message : String(err))
   }
 
   const store = await cookies()

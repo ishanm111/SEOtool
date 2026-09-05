@@ -1,7 +1,7 @@
 'use client'
 
 import Link from 'next/link'
-import { useActionState } from 'react'
+import { useActionState, useState } from 'react'
 import { useFormStatus } from 'react-dom'
 import { inspectSite, saveClient, type OnboardState } from '../../_actions/clients'
 import { QuestionnaireFields } from '../../_components/questionnaire-fields'
@@ -43,6 +43,17 @@ function InspectingNote() {
 export default function NewClientPage() {
   const [state, action] = useActionState<OnboardState, FormData>(inspectSite, { phase: 'idle' })
 
+  /**
+   * Held in state rather than left to the DOM.
+   *
+   * React resets an uncontrolled field once a form action finishes, so a
+   * rejected Google link used to take the website address down with it — and
+   * retyping a URL you already typed, because the *other* box was wrong, is a
+   * miserable way to be told about a mistake.
+   */
+  const [websiteUrl, setWebsiteUrl] = useState('')
+  const [googleProfileUrl, setGoogleProfileUrl] = useState('')
+
   if (state.phase === 'review') return <Review state={state} />
 
   return (
@@ -72,6 +83,8 @@ export default function NewClientPage() {
             autoComplete="off"
             autoFocus
             required
+            value={websiteUrl}
+            onChange={(e) => setWebsiteUrl(e.target.value)}
           />
           <p className="mt-1.5 text-xs text-ink-3">
             The homepage. WordPress and Shopify are read through their own APIs; anything else is
@@ -87,13 +100,15 @@ export default function NewClientPage() {
             id="googleProfileUrl"
             name="googleProfileUrl"
             className="field"
-            placeholder="https://maps.app.goo.gl/…"
+            placeholder="https://maps.app.goo.gl/… or https://share.google/…"
             autoComplete="off"
+            value={googleProfileUrl}
+            onChange={(e) => setGoogleProfileUrl(e.target.value)}
           />
           <p className="mt-1.5 text-xs text-ink-3">
-            Open the listing in Google Maps, press Share, and paste the link. The star rating is
-            what decides whether an engine will recommend the business at all — without it the
-            audit cannot say why a business is being skipped.
+            A Google Maps link or a share.google link both work. The star rating is what decides
+            whether an engine will recommend the business at all — without it the audit cannot say
+            why a business is being skipped.
           </p>
         </div>
 
@@ -183,8 +198,11 @@ function Review({ state }: { state: Extract<OnboardState, { phase: 'review' }> }
           <h2 className="display text-lg">Google Business Profile</h2>
           <dl className="mt-4 grid gap-x-8 gap-y-4 sm:grid-cols-2">
             <Fact label="Listed as" value={gbp.name ?? 'not read'} />
-            <Fact label="Category" value={gbp.category ?? '—'} />
-            <Fact label="Address" value={gbp.address ?? gbp.serviceArea ?? '—'} />
+            <Fact label="Category" value={gbp.category ?? (gbp.readListing ? '—' : 'not read')} />
+            <Fact
+              label="Address"
+              value={gbp.address ?? gbp.serviceArea ?? (gbp.readListing ? '—' : 'not read')}
+            />
             <Fact
               label="Website on the listing"
               value={
@@ -197,8 +215,10 @@ function Review({ state }: { state: Extract<OnboardState, { phase: 'review' }> }
                   >
                     {gbp.website}
                   </a>
-                ) : (
+                ) : gbp.readListing ? (
                   'none — the engines have nowhere to send a customer'
+                ) : (
+                  'not read — this link did not open the listing'
                 )
               }
             />
@@ -222,6 +242,19 @@ function SaveForm({ state }: { state: Extract<OnboardState, { phase: 'review' }>
   const { detection: d, draft } = state
   const [saveState, action] = useActionState<OnboardState, FormData>(saveClient, { phase: 'idle' })
 
+  /**
+   * After a rejection the fields are rebuilt around what was typed, not around
+   * the original suggestions. React clears an uncontrolled field once a form
+   * action finishes, so without this a single missing state would silently undo
+   * every correction and every questionnaire answer on the screen.
+   *
+   * Keyed on the attempt so React remounts the fields rather than reusing nodes
+   * whose values it has already reset.
+   */
+  const submitted = saveState.phase === 'error' ? (saveState.values ?? {}) : {}
+  const keep = (name: string, fallback: string) => submitted[name] ?? fallback
+  const attemptKey = saveState.phase === 'error' ? saveState.attempt ?? 0 : 0
+
   const statesSeen = d.states
     .map((s) => `${s.state} (${s.mentions} mentions)`)
     .join(', ')
@@ -238,12 +271,12 @@ function SaveForm({ state }: { state: Extract<OnboardState, { phase: 'review' }>
         </p>
       </div>
 
-      <div className="grid gap-5 sm:grid-cols-2">
+      <div key={attemptKey} className="grid gap-5 sm:grid-cols-2">
         <div className="sm:col-span-2">
           <label htmlFor="name" className="field-label">
             Business name
           </label>
-          <input id="name" name="name" className="field" defaultValue={draft.name} required />
+          <input id="name" name="name" className="field" defaultValue={keep('name', draft.name)} required />
         </div>
 
         <div>
@@ -254,7 +287,7 @@ function SaveForm({ state }: { state: Extract<OnboardState, { phase: 'review' }>
             id="businessType"
             name="businessType"
             className="field"
-            defaultValue={draft.businessType}
+            defaultValue={keep('businessType', draft.businessType)}
           >
             <option value="local_service">Local service business</option>
             <option value="ecommerce">Online store</option>
@@ -269,7 +302,7 @@ function SaveForm({ state }: { state: Extract<OnboardState, { phase: 'review' }>
             id="primaryPhone"
             name="primaryPhone"
             className="field"
-            defaultValue={draft.primaryPhone ?? ''}
+            defaultValue={keep('primaryPhone', draft.primaryPhone ?? '')}
             placeholder="none found"
           />
         </div>
@@ -282,7 +315,7 @@ function SaveForm({ state }: { state: Extract<OnboardState, { phase: 'review' }>
             id="states"
             name="states"
             className="field"
-            defaultValue={draft.states.join(', ')}
+            defaultValue={keep('states', draft.states.join(', '))}
             placeholder="TX, LA"
           />
           <p className="mt-1.5 text-xs text-ink-3">
@@ -299,7 +332,7 @@ function SaveForm({ state }: { state: Extract<OnboardState, { phase: 'review' }>
             name="towns"
             rows={3}
             className="field"
-            defaultValue={draft.towns.join(', ')}
+            defaultValue={keep('towns', draft.towns.join(', '))}
             placeholder="Houston TX, Pasadena TX"
           />
           <p className="mt-1.5 text-xs text-ink-3">
@@ -310,13 +343,13 @@ function SaveForm({ state }: { state: Extract<OnboardState, { phase: 'review' }>
         </div>
       </div>
 
-      <fieldset className="grid gap-5 border-t border-line pt-6 sm:grid-cols-3">
+      <fieldset key={`gbp-${attemptKey}`} className="grid gap-5 border-t border-line pt-6 sm:grid-cols-3">
         <legend className="eyebrow">Google listing</legend>
         <div className="sm:col-span-3">
           <label htmlFor="gbpUrl" className="field-label">
             Profile link
           </label>
-          <input id="gbpUrl" name="gbpUrl" className="field" defaultValue={draft.gbpUrl ?? ''} />
+          <input id="gbpUrl" name="gbpUrl" className="field" defaultValue={keep('gbpUrl', draft.gbpUrl ?? '')} />
         </div>
         <div>
           <label htmlFor="gbpRating" className="field-label">
@@ -327,7 +360,7 @@ function SaveForm({ state }: { state: Extract<OnboardState, { phase: 'review' }>
             name="gbpRating"
             className="field"
             inputMode="decimal"
-            defaultValue={draft.gbpRating ?? ''}
+            defaultValue={keep('gbpRating', String(draft.gbpRating ?? ''))}
             placeholder="4.6"
           />
         </div>
@@ -340,7 +373,7 @@ function SaveForm({ state }: { state: Extract<OnboardState, { phase: 'review' }>
             name="gbpReviewCount"
             className="field"
             inputMode="numeric"
-            defaultValue={draft.gbpReviewCount ?? ''}
+            defaultValue={keep('gbpReviewCount', String(draft.gbpReviewCount ?? ''))}
             placeholder="type it in"
           />
         </div>
@@ -352,7 +385,7 @@ function SaveForm({ state }: { state: Extract<OnboardState, { phase: 'review' }>
             id="gbpHasWebsite"
             name="gbpHasWebsite"
             className="field"
-            defaultValue={draft.gbpHasWebsite === null ? '' : draft.gbpHasWebsite ? 'yes' : 'no'}
+            defaultValue={keep('gbpHasWebsite', draft.gbpHasWebsite === null ? '' : draft.gbpHasWebsite ? 'yes' : 'no')}
           >
             <option value="">Not known</option>
             <option value="yes">Yes, this site</option>
@@ -367,7 +400,7 @@ function SaveForm({ state }: { state: Extract<OnboardState, { phase: 'review' }>
             id="gbpServiceArea"
             name="gbpServiceArea"
             className="field"
-            defaultValue={draft.gbpServiceArea ?? ''}
+            defaultValue={keep('gbpServiceArea', draft.gbpServiceArea ?? '')}
             placeholder="leave blank for a business with a shopfront"
           />
         </div>
@@ -381,7 +414,15 @@ function SaveForm({ state }: { state: Extract<OnboardState, { phase: 'review' }>
           instead, and a placeholder blocks the change from being published. Most of a fix list
           ends up waiting on the handful of facts below.
         </p>
-        <QuestionnaireFields groups={questionsFor(draft.businessType)} />
+        <QuestionnaireFields
+          key={`intake-${attemptKey}`}
+          groups={questionsFor(draft.businessType)}
+          answers={Object.fromEntries(
+            Object.entries(submitted)
+              .filter(([k]) => k.startsWith('fact_'))
+              .map(([k, v]) => [k.slice('fact_'.length), v]),
+          )}
+        />
       </div>
 
       {saveState.phase === 'error' && (
