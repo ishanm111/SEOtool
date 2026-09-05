@@ -2,7 +2,9 @@ import Link from 'next/link'
 import { listClientCards } from '@/lib/run-queries'
 import { PageHeader, Empty } from '../_components/ui'
 import { ClientCard } from '../_components/client-card'
+import { StartMany } from '../_components/start-many'
 import { AutoRefresh } from '../_components/auto-refresh'
+import { MAX_PARALLEL_RUNS } from '@/lib/runner'
 
 export const dynamic = 'force-dynamic'
 
@@ -52,11 +54,22 @@ export default async function ClientsPage({
           </div>
         </Empty>
       ) : (
-        <div className="grid gap-5 lg:grid-cols-2">
-          {cards.map((c) => (
-            <ClientCard key={c.client.id} card={c} />
-          ))}
-        </div>
+        <>
+          <StartMany
+            maxParallel={MAX_PARALLEL_RUNS}
+            clients={cards.map((c) => ({
+              id: c.client.id,
+              name: c.client.name,
+              domain: c.client.domain,
+              busy: c.activeRun ? `run #${c.activeRun.id} is already going` : null,
+            }))}
+          />
+          <div className="grid gap-5 lg:grid-cols-2">
+            {cards.map((c) => (
+              <ClientCard key={c.client.id} card={c} />
+            ))}
+          </div>
+        </>
       )}
     </div>
   )

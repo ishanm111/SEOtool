@@ -2,6 +2,7 @@ import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { getRunDetail } from '@/lib/run-queries'
 import { STEP_BY_KEY, type StepKey } from '@/lib/pipeline'
+import { MAX_PARALLEL_RUNS } from '@/lib/runner'
 import { cancelRunAction } from '../../_actions/runs'
 import { PageHeader, StatusTag, timeAgo, duration } from '../../_components/ui'
 import { AutoRefresh } from '../../_components/auto-refresh'
@@ -71,6 +72,16 @@ export default async function RunPage({ params }: { params: Promise<{ id: string
           }
         />
       </div>
+
+      {run.status === 'queued' && (
+        <div className="mb-6 rounded-xl border border-line bg-sink p-5">
+          <p className="text-sm font-semibold">Waiting its turn</p>
+          <p className="mt-1 text-sm text-ink-2">
+            {MAX_PARALLEL_RUNS} clients are worked at a time, and that many are already going.
+            This run starts itself the moment one of them finishes — there is nothing to press.
+          </p>
+        </div>
+      )}
 
       {run.error && (
         <div className="mb-6 rounded-xl border border-rose/25 bg-rose-soft p-5">
