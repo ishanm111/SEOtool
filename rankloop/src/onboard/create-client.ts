@@ -80,7 +80,10 @@ export function draftFrom(detection: Detection, gbp: GbpReading | null): ClientD
     gbpRating: gbp?.rating ?? null,
     gbpReviewCount: gbp?.reviewCount ?? null,
     gbpServiceArea: gbp?.serviceArea ?? null,
-    gbpHasWebsite: gbp ? gbpPointsAtSite(gbp.website, detection.domain) : null,
+    // Only decided when the listing was actually read. A share link that went
+    // to Google Search tells us nothing about the website attached to it, and
+    // recording "no website" on that basis would be a fabricated finding.
+    gbpHasWebsite: gbp?.readListing ? gbpPointsAtSite(gbp.website, detection.domain) : null,
   }
 }
 
