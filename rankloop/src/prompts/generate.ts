@@ -1,6 +1,7 @@
 import type { Client, ClientLocation } from '../lib/client'
 import { normaliseState } from '../onboard/us-states'
-import { deriveTrade, splitOffering } from '../lib/trade'
+import { deriveTrade, isVisitTrade, splitOffering } from '../lib/trade'
+import { groupByMarket, type Market } from '../lib/markets'
 
 /**
  * Writes the questions we ask the AI engines.
@@ -17,6 +18,14 @@ import { deriveTrade, splitOffering } from '../lib/trade'
 export type GeneratedPrompt = {
   text: string
   locationName: string | null
+  /**
+   * The place row this question belongs to.
+   *
+   * Place names repeat across states — Richmond VA and Richmond TX are two
+   * markets and one word — so a saved question is filed under the id, never the
+   * name.
+   */
+  locationId: number | null
   intent: string
   persona: 'general' | 'older'
   isCore: boolean
@@ -58,11 +67,63 @@ function localServicePrompts(client: Client, locations: ClientLocation[]): Gener
 
   const offerings = client.offerings.map(splitOffering)
   const things = [...new Set(offerings.map((o) => o.thing))].filter((t) => t.length > 2)
-  const action = offerings.find((o) => o.action)?.action ?? 'service'
+  const action = offerings.find((o) => o.action)?.action ?? null
   const trade = deriveTrade(client)
 
+  /**
+   * Nothing is asked about a business whose trade could not be read off its own
+   * site. The old fallback put the bare word "service" into every question —
+   * "emergency service", "a normal call-out fee for service" — and an engine
+   * answering that is answering about nothing in particular. A measurement taken
+   * with a placeholder in the question is worse than no measurement, because it
+   * arrives with a number attached.
+   */
+  if (!trade || things.length === 0) return []
+
+  /**
+   * One battery of questions per market, not one per client.
+   *
+   * A business with a branch in two places is in two separate contests. Asking
+   * every high-intent question about whichever place happens to be first, and
+   * the rest a single passing question each, measures one market and reports it
+   * as the whole business. Each market therefore gets its own core set — the
+   * questions where an engine actually names a recommendation — anchored on its
+   * own first location.
+   *
+   * The cost is real: core prompts multiply by the number of markets, and every
+   * core prompt is asked of every engine. `measure --market=` runs one market at
+   * a time when that is too long a session.
+   */
+  return groupByMarket(locations).flatMap((market) =>
+    /**
+     * A shop and a call-out trade are found through different questions. Nobody
+     * asks who can come out today to fix their tequila, and nobody asks where to
+     * buy a boiler repair. The battery is chosen by what the offerings say the
+     * business does, not by an assumption about local businesses.
+     */
+    action === null && isVisitTrade(trade)
+      ? visitTradePrompts({ market, things, trade })
+      : marketPrompts({ market, things, action: action ?? 'service', trade }),
+  )
+}
+
+/**
+ * The question set for a single market.
+ *
+ * `primary` is the market's anchor — the place the market-wide questions name.
+ * Everything cycles inside the market, so a question about a Texas town is never
+ * anchored to a Virginia one.
+ */
+function marketPrompts(input: {
+  market: Market
+  things: string[]
+  action: string
+  trade: string
+}): GeneratedPrompt[] {
+  const { market, things, action, trade } = input
+  const locations = market.locations
   const out: GeneratedPrompt[] = []
-  const primary = locations[0]
+  const primary = market.anchor
   const secondary = locations.slice(1)
 
   /**
@@ -83,6 +144,7 @@ function localServicePrompts(client: Client, locations: ClientLocation[]): Gener
     out.push({
       text: `My ${thing} stopped working, who can come out today in ${where(loc)}?`,
       locationName: loc.name,
+      locationId: loc.id,
       intent: 'emergency',
       persona: 'general',
       isCore: i < 2,
@@ -91,6 +153,7 @@ function localServicePrompts(client: Client, locations: ClientLocation[]): Gener
   out.push({
     text: `Emergency ${trade} ${whereShort(primary)} same day service`,
     locationName: primary.name,
+    locationId: primary.id,
     intent: 'emergency',
     persona: 'general',
     isCore: true,
@@ -101,6 +164,7 @@ function localServicePrompts(client: Client, locations: ClientLocation[]): Gener
     {
       text: `Best ${trade} company in ${where(primary)}`,
       locationName: primary.name,
+      locationId: primary.id,
       intent: 'comparison',
       persona: 'general',
       isCore: true,
@@ -108,15 +172,26 @@ function localServicePrompts(client: Client, locations: ClientLocation[]): Gener
     {
       text: `Most reliable ${trade} service in ${where(primary)}`,
       locationName: primary.name,
+      locationId: primary.id,
       intent: 'comparison',
       persona: 'general',
       isCore: true,
     },
   )
-  for (const loc of secondary.slice(0, 4)) {
+  /**
+   * Every other place in the market, not a sample of them.
+   *
+   * The other batteries cycle places against the offering list, so a market with
+   * more places than offerings leaves the tail of the list never asked about at
+   * all — and a place with no questions is reported as unmeasured, not as fine.
+   * Comparison is the intent where an engine actually names a recommendation, so
+   * it is the one worth guaranteeing to each of them.
+   */
+  for (const loc of secondary) {
     out.push({
       text: `Recommend ${article(trade)} ${trade} company near ${where(loc)}`,
       locationName: loc.name,
+      locationId: loc.id,
       intent: 'comparison',
       persona: 'general',
       isCore: false,
@@ -125,6 +200,7 @@ function localServicePrompts(client: Client, locations: ClientLocation[]): Gener
   out.push({
     text: `Which ${trade} companies in ${where(primary)} have the best reviews?`,
     locationName: primary.name,
+    locationId: primary.id,
     intent: 'comparison',
     persona: 'general',
     isCore: false,
@@ -136,6 +212,7 @@ function localServicePrompts(client: Client, locations: ClientLocation[]): Gener
     out.push({
       text: `How much does it cost to ${action} a ${thing} in ${where(loc)}?`,
       locationName: loc.name,
+      locationId: loc.id,
       intent: 'price',
       persona: 'general',
       isCore: i === 0,
@@ -144,6 +221,7 @@ function localServicePrompts(client: Client, locations: ClientLocation[]): Gener
   out.push({
     text: `What is a normal call-out fee for ${trade} in ${where(primary)}?`,
     locationName: primary.name,
+    locationId: primary.id,
     intent: 'price',
     persona: 'general',
     isCore: false,
@@ -155,6 +233,7 @@ function localServicePrompts(client: Client, locations: ClientLocation[]): Gener
     out.push({
       text: `${thing} ${action} ${whereShort(loc)}`,
       locationName: loc.name,
+      locationId: loc.id,
       intent: 'service',
       persona: 'general',
       isCore: i < 2,
@@ -167,6 +246,7 @@ function localServicePrompts(client: Client, locations: ClientLocation[]): Gener
     {
       text: `I need someone to come and look at my ${firstThing}, it has stopped working. I live in ${where(primary)}. Who should I call?`,
       locationName: primary.name,
+      locationId: primary.id,
       intent: 'emergency',
       persona: 'older',
       isCore: true,
@@ -174,6 +254,7 @@ function localServicePrompts(client: Client, locations: ClientLocation[]): Gener
     {
       text: `I am not sure who to trust for ${trade} near ${where(primary)}. Can you recommend somebody reliable?`,
       locationName: primary.name,
+      locationId: primary.id,
       intent: 'comparison',
       persona: 'older',
       isCore: true,
@@ -183,6 +264,139 @@ function localServicePrompts(client: Client, locations: ClientLocation[]): Gener
     out.push({
       text: `I am looking for an honest ${trade} company in ${where(secondary[0])} that will not overcharge me.`,
       locationName: secondary[0].name,
+      locationId: secondary[0].id,
+      intent: 'comparison',
+      persona: 'older',
+      isCore: false,
+    })
+  }
+
+  return out
+}
+
+
+/**
+ * The question set for a business customers travel to: a shop, a store, a
+ * counter someone walks up to.
+ *
+ * The intents differ from a call-out trade in kind, not just in wording. Nobody
+ * has an emergency about a bottle of tequila, but "open now near me" is the same
+ * urgency in a different shape — and "where can I buy X" is the question an AI
+ * assistant is actually asked about a shop, in place of "who can come out".
+ */
+function visitTradePrompts(input: { market: Market; things: string[]; trade: string }): GeneratedPrompt[] {
+  const { market, things, trade } = input
+  const locations = market.locations
+  const out: GeneratedPrompt[] = []
+  const primary = market.anchor
+  const secondary = locations.slice(1)
+
+  const where = (l: ClientLocation) => `${l.name}${l.region ? ` ${l.region}` : ''}`
+  const whereShort = (l: ClientLocation) => {
+    const abbr = normaliseState(l.region || '')
+    return `${l.name}${abbr ? ` ${abbr}` : ''}`
+  }
+
+  // ── purchase: the highest-intent question asked of a shop
+  for (const [i, thing] of things.slice(0, 4).entries()) {
+    const loc = locations[i % locations.length]
+    out.push({
+      text: `Where can I buy ${thing} in ${where(loc)}?`,
+      locationName: loc.name,
+      locationId: loc.id,
+      intent: 'purchase',
+      persona: 'general',
+      isCore: i < 2,
+    })
+  }
+  out.push({
+    text: `${trade} open now near ${whereShort(primary)}`,
+    locationName: primary.name,
+    locationId: primary.id,
+    intent: 'purchase',
+    persona: 'general',
+    isCore: true,
+  })
+
+  // ── comparison: where an engine actually names a recommendation
+  out.push(
+    {
+      text: `Best ${trade} in ${where(primary)}`,
+      locationName: primary.name,
+      locationId: primary.id,
+      intent: 'comparison',
+      persona: 'general',
+      isCore: true,
+    },
+    {
+      text: `Which ${trade} in ${where(primary)} has the best selection?`,
+      locationName: primary.name,
+      locationId: primary.id,
+      intent: 'comparison',
+      persona: 'general',
+      isCore: true,
+    },
+  )
+  // Every other place in the market, so none goes unasked.
+  for (const loc of secondary) {
+    out.push({
+      text: `Recommend ${article(trade)} ${trade} near ${where(loc)}`,
+      locationName: loc.name,
+      locationId: loc.id,
+      intent: 'comparison',
+      persona: 'general',
+      isCore: false,
+    })
+  }
+  out.push({
+    text: `Which ${trade} in ${where(primary)} has the best reviews?`,
+    locationName: primary.name,
+    locationId: primary.id,
+    intent: 'comparison',
+    persona: 'general',
+    isCore: false,
+  })
+
+  // ── price
+  if (things[0]) {
+    out.push({
+      text: `Where is the cheapest place to buy ${things[0]} in ${where(primary)}?`,
+      locationName: primary.name,
+      locationId: primary.id,
+      intent: 'price',
+      persona: 'general',
+      isCore: false,
+    })
+  }
+
+  // ── keyword-shaped, one per offering: how the query is typed, not spoken
+  for (const [i, thing] of things.slice(0, 6).entries()) {
+    const loc = locations[i % locations.length]
+    out.push({
+      text: `${thing} ${whereShort(loc)}`,
+      locationName: loc.name,
+      locationId: loc.id,
+      intent: 'product',
+      persona: 'general',
+      isCore: i < 2,
+    })
+  }
+
+  // ── older-customer phrasing: longer, conversational, trust-led
+  const firstThing = things[0] ?? trade
+  out.push({
+    text: `I am looking for ${firstThing} near ${where(primary)} and I do not know where to go. Can you recommend somewhere?`,
+    locationName: primary.name,
+    locationId: primary.id,
+    intent: 'comparison',
+    persona: 'older',
+    isCore: true,
+  })
+  if (secondary[0]) {
+    out.push({
+      text: `Is there ${article(trade)} ${trade} near ${where(secondary[0])} where the staff will help me choose?`,
+      locationName: secondary[0].name,
+      locationId: secondary[0].id,
       intent: 'comparison',
       persona: 'older',
       isCore: false,
@@ -194,14 +408,53 @@ function localServicePrompts(client: Client, locations: ClientLocation[]): Gener
 
 // ── ecommerce ───────────────────────────────────────────────────────────────
 
-/** Strips variant noise so a product title reads as a category a person would type. */
+/**
+ * Strips variant noise so a product title reads as a category a person would type.
+ *
+ * The noise differs by trade — apparel repeats gender and colourway, homeware
+ * repeats size and pack count, consumables repeat volume — so all three are
+ * stripped rather than assuming which kind of store this is. A word that does
+ * not apply simply never matches.
+ */
 function productCategory(offering: string): string {
   return offering
-    .replace(/\b(mens|womens|men|women|kids|unisex)\b/gi, '')
     .replace(/\s*-\s*.*$/, '')
+    // audience and colourway (apparel, accessories)
+    .replace(/\b(mens|womens|men|women|kids|childrens|unisex)\b/gi, '')
     .replace(/\b(black|white|grey|gray|navy|blue|red|green|pink|onyx|natural|new|edition|low|high|mid)\b/gi, '')
+    // size, count and volume (homeware, consumables, hardware)
+    // Bare "s"/"m"/"l" are deliberately absent — too many real words are one letter
+    // in a product name, and stripping them mangles the category.
+    .replace(/\b(xs|xl|xxl|small|medium|large)\b/gi, '')
+    .replace(/\b\d+(\.\d+)?\s?(ml|l|g|kg|oz|lb|cm|mm|in|ft|pack|pk|ct|count|piece|pcs)\b/gi, '')
+    .replace(/\b(pack|set|bundle|refill|starter|kit)\s+of\s+\d+\b/gi, '')
     .replace(/\s+/g, ' ')
     .trim()
+}
+
+/** Nouns that end in "s" while already being singular. */
+const ALREADY_SINGULAR = new Set(['news', 'series', 'species', 'lens', 'glass', 'dress'])
+
+/**
+ * Singularises a category for use in front of another noun.
+ *
+ * Categories arrive plural because that is how a store names a collection, but
+ * nobody types "shoes brands" — attributive nouns go singular in English. Left
+ * plural, the question reads as machine-written to the person reviewing it and,
+ * more importantly, stops matching how the query is actually typed.
+ */
+function attributive(category: string): string {
+  const words = category.split(' ')
+  const last = words[words.length - 1]
+  const lower = last.toLowerCase()
+  if (ALREADY_SINGULAR.has(lower) || !lower.endsWith('s')) return category
+
+  let singular = last
+  if (/[^aeiou]ies$/i.test(last)) singular = last.slice(0, -3) + 'y'
+  else if (/(sse|xe|ze|che|she)s$/i.test(last)) singular = last.slice(0, -2)
+  else if (!/(ss|us|is)$/i.test(last) && last.length >= 4) singular = last.slice(0, -1)
+
+  return [...words.slice(0, -1), singular].join(' ')
 }
 
 /**
@@ -227,6 +480,7 @@ function ecommercePrompts(client: Client): GeneratedPrompt[] {
     out.push({
       text: `Best ${cat} to buy online`,
       locationName: null,
+      locationId: null,
       intent: 'discovery',
       persona: 'general',
       isCore: i < 3,
@@ -237,6 +491,7 @@ function ecommercePrompts(client: Client): GeneratedPrompt[] {
     out.push({
       text: `Where can I buy good ${cat}?`,
       locationName: null,
+      locationId: null,
       intent: 'where-to-buy',
       persona: 'general',
       isCore: i < 2,
@@ -247,16 +502,23 @@ function ecommercePrompts(client: Client): GeneratedPrompt[] {
     out.push({
       text: `What should I look for when choosing ${cat}?`,
       locationName: null,
+      locationId: null,
       intent: 'problem',
       persona: 'general',
       isCore: i < 2,
     })
   }
 
+  /**
+   * Value questions, asked without naming a quality any particular kind of
+   * product has. "Most comfortable" only means something for things you wear;
+   * "worth the money" means something for every store.
+   */
   for (const cat of top.slice(0, 3)) {
     out.push({
-      text: `Most comfortable ${cat} for everyday wear`,
+      text: `Which ${attributive(cat)} brands are actually worth the money?`,
       locationName: null,
+      locationId: null,
       intent: 'discovery',
       persona: 'general',
       isCore: false,
@@ -268,6 +530,7 @@ function ecommercePrompts(client: Client): GeneratedPrompt[] {
     {
       text: `Is ${brand} any good?`,
       locationName: null,
+      locationId: null,
       intent: 'brand',
       persona: 'general',
       isCore: true,
@@ -275,6 +538,7 @@ function ecommercePrompts(client: Client): GeneratedPrompt[] {
     {
       text: `${brand} reviews — is it worth buying from?`,
       locationName: null,
+      locationId: null,
       intent: 'brand',
       persona: 'general',
       isCore: true,
@@ -282,18 +546,26 @@ function ecommercePrompts(client: Client): GeneratedPrompt[] {
   )
   if (top[0]) {
     out.push({
-      text: `${brand} vs other ${top[0]} brands`,
+      text: `${brand} vs other ${attributive(top[0])} brands`,
       locationName: null,
+      locationId: null,
       intent: 'comparison',
       persona: 'general',
       isCore: true,
     })
   }
 
+  /**
+   * Price intent without naming a figure. A fixed threshold ("under $100") is a
+   * guess about the store's price band — it reads as absurd for a £2 consumable
+   * and as bargain-hunting for a £2,000 one, and either way it measures the
+   * wrong query. Asking what a thing costs works at any price point.
+   */
   for (const cat of top.slice(0, 3)) {
     out.push({
-      text: `Best ${cat} under $100`,
+      text: `How much should I expect to pay for good ${cat}?`,
       locationName: null,
+      locationId: null,
       intent: 'price',
       persona: 'general',
       isCore: false,

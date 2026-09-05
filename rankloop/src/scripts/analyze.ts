@@ -1,8 +1,9 @@
 import { eq, inArray } from 'drizzle-orm'
 import { openDb, schema } from '../db/raw'
 import { resolveClient, clientLocations } from '../lib/resolve-client'
-import { extractMentions, mentionsClient } from '../analysis/parse'
-import { buildFindings } from '../analysis/findings'
+import { extractMentions, isAnswer, mentionsClient } from '../analysis/parse'
+import { buildFindings, type MarketRate } from '../analysis/findings'
+import { groupByMarket, marketKeyOf } from '../lib/markets'
 import { JUNK_CITATION_DOMAINS } from '../config'
 
 function main() {
@@ -43,18 +44,58 @@ function main() {
   }
 
   let named = 0
-  const okRuns = runs.filter((r) => r.ok && r.answerText.trim())
+  const okRuns = runs.filter(isAnswer)
   const competitorCounts = new Map<string, number>()
+
+  /**
+   * Which market each answer belongs to.
+   *
+   * An answer is about the place its question named, so the chain is
+   * run -> prompt -> location -> market. Answers from a question with no place
+   * in it (an ecommerce set, or a generic question) belong to no market and are
+   * counted only in the overall rate.
+   */
+  const markets = groupByMarket(locations)
+  const marketKeyByLocation = new Map(locations.map((l) => [l.id, marketKeyOf(l)]))
+  const promptById = new Map(prompts.map((p) => [p.id, p]))
+  const tally = new Map<string, { named: number; total: number }>()
+  for (const m of markets) tally.set(m.key, { named: 0, total: 0 })
 
   for (const run of okRuns) {
     const found = extractMentions(run.answerText, client)
     if (found.length > 0) {
       db.insert(schema.mentions).values(found.map((m) => ({ runId: run.id, ...m }))).run()
     }
-    if (mentionsClient(run.answerText, client)) named++
+    const isNamed = mentionsClient(run.answerText, client)
+    if (isNamed) named++
+
+    const locationId = promptById.get(run.promptId)?.locationId
+    const key = locationId == null ? undefined : marketKeyByLocation.get(locationId)
+    const row = key ? tally.get(key) : undefined
+    if (row) {
+      row.total++
+      if (isNamed) row.named++
+    }
+
     for (const m of found) {
       if (!m.isClient) competitorCounts.set(m.businessName, (competitorCounts.get(m.businessName) ?? 0) + 1)
     }
+  }
+
+  const marketRates: MarketRate[] = markets.map((m) => ({
+    label: m.label,
+    named: tally.get(m.key)?.named ?? 0,
+    total: tally.get(m.key)?.total ?? 0,
+    locations: m.locations.map((l) => l.name),
+  }))
+
+  if (marketRates.length > 1) {
+    console.log('visibility by market:')
+    for (const m of marketRates) {
+      const pct = m.total > 0 ? `${Math.round((m.named / m.total) * 100)}%` : 'not measured'
+      console.log(`  ${m.label.padEnd(22)} ${m.named}/${m.total}  ${pct}`)
+    }
+    console.log('')
   }
 
   /**
@@ -137,6 +178,7 @@ function main() {
     paragraphs,
     runs,
     clientMentionRate: { named, total: okRuns.length },
+    marketRates,
     competitors,
     competitiveBar,
   })

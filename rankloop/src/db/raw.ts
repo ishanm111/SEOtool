@@ -1,5 +1,5 @@
-import Database from 'better-sqlite3'
 import { drizzle } from 'drizzle-orm/better-sqlite3'
+import { openSqlite } from './connect'
 import * as schema from './schema'
 
 /**
@@ -7,9 +7,7 @@ import * as schema from './schema'
  * The Next app should import from `./index` instead.
  */
 export function openDb(file = process.env.RANKLOOP_DB ?? 'data.db') {
-  const sqlite = new Database(file)
-  sqlite.pragma('journal_mode = WAL')
-  return drizzle(sqlite, { schema })
+  return drizzle(openSqlite(file, { handleSignals: true }), { schema })
 }
 
 export { schema }

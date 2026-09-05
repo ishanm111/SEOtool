@@ -1,5 +1,5 @@
 {
-  "name": "rankloop",
+  "name": "seomyze",
   "version": "0.1.0",
   "private": true,
   "scripts": {
@@ -11,6 +11,7 @@
     "add-client": "tsx src/scripts/add-client.ts",
     "ingest": "tsx src/scripts/ingest.ts",
     "prompts": "tsx src/scripts/generate-prompts.ts",
+    "market": "tsx src/scripts/set-market.ts",
     "login": "tsx src/scripts/login.ts",
     "measure": "tsx src/scripts/measure.ts",
     "competitors": "tsx src/scripts/mine-competitors.ts",

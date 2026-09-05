@@ -16,6 +16,19 @@ export type IngestedPage = {
   contentHtml: string
   schemaTypes: string[]
   pageType: 'page' | 'post' | 'product' | 'collection'
+  /**
+   * Words the served HTML actually carried, before any fallback. Adapters that
+   * read a platform API leave this unset — their content never went through a
+   * browser to begin with, so there is nothing to under-report.
+   */
+  renderedWordCount?: number
+  /**
+   * Where the content came from. `structured-data` means the page served no
+   * readable copy and its own JSON-LD was read instead; the audit still has
+   * something true to work on, and the report says so rather than presenting a
+   * blank as a measurement.
+   */
+  contentSource?: 'html' | 'structured-data'
 }
 
 export type IngestAdapter = {

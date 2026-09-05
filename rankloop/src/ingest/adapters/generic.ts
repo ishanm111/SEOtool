@@ -1,7 +1,21 @@
 import * as cheerio from 'cheerio'
+import {
+  jsonLdSignals,
+  parseJsonLd,
+  schemaContentHtml,
+  schemaTypesOf,
+  visibleWordCount,
+} from '../../lib/jsonld'
 import { collectSitemapUrls, get, linksFromHtml, originOf } from '../../lib/sitemap'
 import type { IngestAdapter, IngestedPage } from './types'
 import { slugFromUrl } from './types'
+
+/**
+ * Below this many served words a page is treated as client-rendered. A real
+ * page — even a thin one — carries a heading, a paragraph and a call to action;
+ * an app shell carries a loading message at most.
+ */
+const RENDERED_TEXT_FLOOR = 50
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
 
@@ -19,23 +33,8 @@ export function extractPageFromHtml(
 ): IngestedPage {
   const $ = cheerio.load(html)
 
-  const schemaTypes = new Set<string>()
-  $('script[type="application/ld+json"]').each((_, el) => {
-    try {
-      const walk = (node: unknown) => {
-        if (Array.isArray(node)) return node.forEach(walk)
-        if (node && typeof node === 'object') {
-          const t = (node as Record<string, unknown>)['@type']
-          if (typeof t === 'string') schemaTypes.add(t)
-          else if (Array.isArray(t)) t.forEach((x) => typeof x === 'string' && schemaTypes.add(x))
-          Object.values(node as Record<string, unknown>).forEach(walk)
-        }
-      }
-      walk(JSON.parse($(el).contents().text()))
-    } catch {
-      // malformed JSON-LD is common in the wild
-    }
-  })
+  const nodes = parseJsonLd(html)
+  const schemaTypes = new Set<string>(schemaTypesOf(nodes))
   $('[itemtype]').each((_, el) => {
     const t = $(el).attr('itemtype')?.split('/').pop()
     if (t) schemaTypes.add(t)
@@ -44,6 +43,18 @@ export function extractPageFromHtml(
   // Prefer the main content region; fall back to body so nothing is lost on
   // sites that never mark one up.
   const main = $('main').length ? $('main') : $('article').length ? $('article') : $('body')
+  const contentHtml = main.html() ?? ''
+  const renderedWordCount = visibleWordCount(contentHtml)
+
+  /**
+   * A page that serves no copy is not an empty page — it is a page whose copy
+   * arrives in the browser. Its facts are still in the served HTML, in the
+   * JSON-LD the site publishes for machines, so that is what gets read.
+   *
+   * Auditing the empty string instead would score every signal at zero and then
+   * report those zeros to a client as measurements.
+   */
+  const fallback = renderedWordCount < RENDERED_TEXT_FLOOR ? schemaContentHtml(jsonLdSignals(nodes)) : ''
 
   return {
     externalId: null,
@@ -54,9 +65,11 @@ export function extractPageFromHtml(
       $('meta[name="description"]').attr('content')?.trim() ??
       $('meta[property="og:description"]').attr('content')?.trim() ??
       '',
-    contentHtml: main.html() ?? '',
+    contentHtml: fallback ? `${contentHtml}\n${fallback}` : contentHtml,
     schemaTypes: [...schemaTypes].sort(),
     pageType,
+    renderedWordCount,
+    contentSource: fallback ? 'structured-data' : 'html',
   }
 }
 

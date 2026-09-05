@@ -64,6 +64,7 @@ async function main() {
         metaDescription: wp.metaDescription,
         text: plainText,
         wordCount: wordCount(plainText),
+        renderedWordCount: wp.renderedWordCount ?? wordCount(plainText),
         schemaTypes: JSON.stringify(wp.schemaTypes),
         pageType: wp.pageType,
         geoRefs: JSON.stringify(geo.terms),
@@ -95,7 +96,22 @@ async function main() {
     }
   }
 
+  const clientRendered = wpPages.filter((p) => p.contentSource === 'structured-data')
   console.log(`stored ${wpPages.length} pages, ${totalParagraphs} paragraphs\n`)
+
+  /**
+   * Said out loud, because it changes what every later number means. A page read
+   * from its structured data was audited on what the site publishes for
+   * machines, not on copy a visitor can read — and a crawler that does not run
+   * JavaScript sees the same nothing this crawler saw.
+   */
+  if (clientRendered.length > 0) {
+    console.log(
+      `${clientRendered.length} of ${wpPages.length} pages served no readable text — their copy is assembled in the browser.`,
+    )
+    console.log('  Read from the structured data instead: ' + clientRendered.slice(0, 5).map((p) => `/${p.slug}`).join(', '))
+    console.log('  This is itself a finding: those pages are invisible to crawlers that do not run JavaScript.\n')
+  }
 
   if (client.wrongGeoTerms.length === 0) {
     console.log('(no wrong-geography terms recorded for this client — geo audit skipped)')

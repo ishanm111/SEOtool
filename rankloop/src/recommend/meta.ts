@@ -1,5 +1,5 @@
 import type { Recommendation, RecommendInput, PageRow } from './types'
-import { SUPERLATIVE_PATTERN } from './types'
+import { FILL, SUPERLATIVE_PATTERN } from './types'
 import type { Client, ClientLocation } from '../lib/client'
 
 /**
@@ -73,7 +73,17 @@ function shorten(s: string, max: number): string {
   // Only now fall back to a word-boundary cut.
   const hard = out.slice(0, max)
   const lastSpace = hard.lastIndexOf(' ')
-  return (lastSpace > max * 0.6 ? hard.slice(0, lastSpace) : hard).replace(/[,;:\-–—(\s]+$/, '')
+  const cut = (lastSpace > max * 0.6 ? hard.slice(0, lastSpace) : hard).replace(/[,;:\-–—(\s]+$/, '')
+
+  /**
+   * Never leave half a placeholder behind. A cut that lands inside "[[FILL: …]]"
+   * produces text that no longer reads as a placeholder, so it stops looking
+   * like something a human still has to fill in — which is the one thing the
+   * marker exists to guarantee. Drop the whole placeholder instead.
+   */
+  return cut.includes('[[FILL:') && !cut.trimEnd().endsWith(']]')
+    ? cut.slice(0, cut.lastIndexOf('[[FILL:')).replace(/[,;:\-–—(\s]+$/, '')
+    : cut
 }
 
 /**
@@ -119,12 +129,20 @@ function buildDescription(page: PageRow, client: Client, locations: ClientLocati
   let body: string
   if (isEcom) {
     const subject = page.title.split(/[|–—]/)[0].trim() || page.slug.replace(/[-_]/g, ' ')
+    /**
+     * The fallback used to promise "Free delivery and returns on every order",
+     * which is both a guess about the store and an invented claim — exactly what
+     * the rest of this codebase refuses to do. A meta description is published
+     * text, so it gets a placeholder like everything else.
+     */
     body = firstSentence
       ? `${firstSentence}`
-      : `${titleCase(subject)} from ${client.name}. Free delivery and returns on every order.`
+      : `${titleCase(subject)} from ${client.name}. ${FILL('one line on why this is worth buying')}`
   } else if (offering && loc) {
+    // "Book a technician" assumes a repair trade. Plenty of local businesses
+    // send nobody, or send someone who is not called a technician.
     body = `${titleCase(offering)} across ${loc.name}${loc.region ? `, ${loc.region}` : ''}. ${
-      client.primaryPhone ? `Call ${client.primaryPhone} to book a technician.` : 'Call to book a visit.'
+      client.primaryPhone ? `Call ${client.primaryPhone} to book.` : 'Call to book.'
     }`
   } else if (loc) {
     body = `${client.name} covers ${loc.name}${loc.region ? `, ${loc.region}` : ''}. ${
@@ -139,48 +157,175 @@ function buildDescription(page: PageRow, client: Client, locations: ClientLocati
   return shorten(body.replace(/\s+/g, ' ').trim(), DESC_MAX)
 }
 
+
+/**
+ * The words that say what this page is about: what the business sells, and where.
+ *
+ * Used to compare a rewrite against what it would replace. A title can be too
+ * long, or carry a superlative, and still be the only place on the page that
+ * names the thing being sold — swapping it for a shorter, blander line fixes the
+ * measured fault and loses the meaning, which is a worse page by the standard
+ * this whole tool is built on.
+ */
+function subjectTerms(client: Client, locations: ClientLocation[]): string[] {
+  const terms = new Set<string>()
+  for (const o of client.offerings) {
+    for (const w of o.split(/\s+/)) if (w.length > 3) terms.add(w.toLowerCase())
+  }
+  for (const l of locations) terms.add(l.name.toLowerCase())
+  return [...terms]
+}
+
+/** How many distinct subject terms a piece of text actually carries. */
+function informationScore(text: string, terms: string[]): number {
+  const lower = text.toLowerCase()
+  return terms.filter((t) => lower.includes(t)).length
+}
+
+/**
+ * The same text with its superlatives removed, or null when that cannot be done
+ * cleanly. Preferred over a generated replacement when the only fault is puff:
+ * the business wrote the rest of the line, and it is about something real.
+ */
+function withoutSuperlatives(text: string): string | null {
+  SUPERLATIVE_PATTERN.lastIndex = 0
+  const stripped = text
+    .replace(SUPERLATIVE_PATTERN, '')
+    .replace(/\s{2,}/g, ' ')
+    // Separators left stranded by the removal.
+    .replace(/\s*([|–—-])\s*\1+/g, ' $1 ')
+    .replace(/^\s*[|–—-]\s*/, '')
+    .replace(/\s*[|–—-]\s*$/, '')
+    .replace(/\s+([,.])/g, '$1')
+    .trim()
+  SUPERLATIVE_PATTERN.lastIndex = 0
+  return stripped.length >= 15 && stripped !== text.trim() ? stripped : null
+}
+
+/**
+ * Trims a description without dismantling it.
+ *
+ * `shorten` drops trailing dash-separated segments, which is right for a product
+ * title and wrong for a sentence: a description that reads "El Barrilito Liquor
+ * Store in Pasadena, TX — tequila, mezcal, whiskey…" loses everything it was
+ * about at the first em dash. Whole sentences are kept instead, and only a
+ * single over-long sentence falls back to a word-boundary cut.
+ */
+function shortenProse(text: string, max: number): string {
+  const clean = text.replace(/\s+/g, ' ').trim()
+  if (clean.length <= max) return clean
+
+  const sentences = clean.split(/(?<=[.!?])\s+/)
+  let out = ''
+  for (const sentence of sentences) {
+    const next = out ? `${out} ${sentence}` : sentence
+    if (next.length > max) break
+    out = next
+  }
+  if (out.length >= 60) return out
+
+  const hard = clean.slice(0, max)
+  const lastBreak = Math.max(hard.lastIndexOf(', '), hard.lastIndexOf(' '))
+  return (lastBreak > max * 0.6 ? hard.slice(0, lastBreak) : hard).replace(/[,;:\-–—(\s]+$/, '')
+}
+
+/**
+ * Which text to actually propose.
+ *
+ * A generated line only wins when it says at least as much about the page as the
+ * one already there. Otherwise the existing text is repaired in place — trimmed
+ * to length, stripped of puff — and if neither is needed, nothing is proposed at
+ * all, because a rewrite that changes nothing real is noise in a client's list.
+ */
+function bestProposal(input: {
+  current: string
+  generated: string | null
+  max: number
+  terms: string[]
+  dropSuperlatives: boolean
+  /** How this kind of text is shortened: a title is a label, a description is prose. */
+  trim: (text: string, max: number) => string
+}): string | null {
+  const { current, generated, max, terms, dropSuperlatives, trim } = input
+  if (!current) return generated
+
+  let repaired = current
+  if (dropSuperlatives) repaired = withoutSuperlatives(repaired) ?? repaired
+  if (repaired.length > max) repaired = trim(repaired, max)
+
+  /**
+   * Strictly better, not merely equal. On a tie the business's own words win:
+   * they were written by someone who knows the business, and a generated line
+   * that says the same amount is a change for its own sake.
+   */
+  const generatedWins =
+    generated !== null && informationScore(generated, terms) > informationScore(repaired, terms)
+  const choice = generatedWins ? generated : repaired
+  return choice.trim() && choice.trim().toLowerCase() !== current.trim().toLowerCase() ? choice.trim() : null
+}
+
 export function recommendMeta(input: RecommendInput): Recommendation[] {
   const { client, locations, pages } = input
   const out: Recommendation[] = []
+  const terms = subjectTerms(client, locations)
 
   for (const page of pages) {
     const currentTitle = page.title.trim()
     const currentDesc = page.metaDescription.trim()
 
     // ── title
-    const proposedTitle = buildTitle(page, client, locations)
-    if (proposedTitle && proposedTitle.toLowerCase() !== currentTitle.toLowerCase()) {
-      const problems: string[] = []
-      if (!currentTitle) problems.push('the page has no title')
-      else if (currentTitle.length > TITLE_MAX) problems.push(`the title is ${currentTitle.length} characters, so search engines cut it off`)
-      if (SUPERLATIVE_PATTERN.test(currentTitle)) {
-        problems.push('it leads with a superlative, which the research measures as neutral-to-negative')
-      }
-      SUPERLATIVE_PATTERN.lastIndex = 0
-      if (locationFor(page, locations) && !locations.some((l) => currentTitle.toLowerCase().includes(l.name.toLowerCase()))) {
-        problems.push('the page is about a place it never names in the title')
-      }
+    const problems: string[] = []
+    if (!currentTitle) problems.push('the page has no title')
+    else if (currentTitle.length > TITLE_MAX) problems.push(`the title is ${currentTitle.length} characters, so search engines cut it off`)
+    SUPERLATIVE_PATTERN.lastIndex = 0
+    const puffyTitle = SUPERLATIVE_PATTERN.test(currentTitle)
+    SUPERLATIVE_PATTERN.lastIndex = 0
+    if (puffyTitle) {
+      problems.push('it leads with a superlative, which the research measures as neutral-to-negative')
+    }
+    if (locationFor(page, locations) && !locations.some((l) => currentTitle.toLowerCase().includes(l.name.toLowerCase()))) {
+      problems.push('the page is about a place it never names in the title')
+    }
 
-      if (problems.length > 0) {
-        out.push({
-          pageId: page.id,
-          kind: 'meta_title',
-          target: page.url,
-          currentValue: currentTitle || null,
-          proposedValue: proposedTitle,
-          reason: `Rewrite because ${problems.join('; and ')}.`,
-          priority: problems.length > 1 ? 78 : 68,
-        })
-      }
+    const proposedTitle = bestProposal({
+      current: currentTitle,
+      generated: buildTitle(page, client, locations),
+      max: TITLE_MAX,
+      terms,
+      dropSuperlatives: puffyTitle,
+      trim: shorten,
+    })
+
+    if (proposedTitle && problems.length > 0) {
+      out.push({
+        pageId: page.id,
+        kind: 'meta_title',
+        target: page.url,
+        currentValue: currentTitle || null,
+        proposedValue: proposedTitle,
+        reason: `Rewrite because ${problems.join('; and ')}.`,
+        priority: problems.length > 1 ? 78 : 68,
+      })
     }
 
     // ── description
-    const proposedDesc = buildDescription(page, client, locations)
+    SUPERLATIVE_PATTERN.lastIndex = 0
+    const puffyDesc = SUPERLATIVE_PATTERN.test(currentDesc)
+    SUPERLATIVE_PATTERN.lastIndex = 0
+    const proposedDesc = bestProposal({
+      current: currentDesc,
+      generated: buildDescription(page, client, locations),
+      max: DESC_MAX,
+      terms,
+      dropSuperlatives: puffyDesc,
+      trim: shortenProse,
+    })
     if (proposedDesc) {
       const problems: string[] = []
       if (!currentDesc) problems.push('the page has no meta description, so engines invent one from the copy')
       else if (currentDesc.length > DESC_MAX) problems.push(`it is ${currentDesc.length} characters and gets truncated`)
       else if (currentDesc.length < 70) problems.push(`it is only ${currentDesc.length} characters, which wastes the space`)
+      if (puffyDesc) problems.push('it uses superlatives, which the research measures as neutral-to-negative')
 
       if (problems.length > 0 && proposedDesc.toLowerCase() !== currentDesc.toLowerCase()) {
         out.push({

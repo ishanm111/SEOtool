@@ -15,6 +15,20 @@
  */
 export const RATING_THRESHOLDS = { chatgpt: 4.3, perplexity: 4.1, gemini: 3.9 } as const
 
+/**
+ * The shortest string that can be a real answer.
+ *
+ * A stable string is not an answer. Gemini returned the accessibility label
+ * "Gemini said" — eleven characters, perfectly stable, and the reader accepted
+ * it as the response. Google leaves behind furniture of the same shape
+ * ("∙ Choose area"), and both are counted as measurements unless something
+ * rejects them. Eighty characters is comfortably below any real recommendation
+ * and comfortably above every label seen so far.
+ *
+ * A property of how the engines render, not of any client, so it lives here.
+ */
+export const MIN_ANSWER_CHARS = 80
+
 /** The two kinds of business the pipeline handles, each with its own logic. */
 export const BUSINESS_TYPES = ['local_service', 'ecommerce'] as const
 export type BusinessType = (typeof BUSINESS_TYPES)[number]

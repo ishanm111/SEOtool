@@ -18,6 +18,8 @@ export type ReportData = {
   named: number
   totalAnswers: number
   engines: { engine: string; ok: number; named: number }[]
+  /** One row per trading area. Empty or single-entry for a business in one place. */
+  markets: { label: string; named: number; total: number; locations: string[] }[]
 
   competitors: [string, number][]
   citedDomains: [string, number][]
@@ -31,8 +33,14 @@ export type ReportData = {
 
   pageCount: number
   paragraphCount: number
+  /** Pages that served no readable HTML — their copy is assembled in the browser. */
+  clientRenderedPages: number
   wrongGeoPages: number
   wrongGeoHits: number
+  /** How many distinct phone numbers the site publishes. Zero is its own finding. */
+  phoneCount: number
+  /** Questions written and saved, whether or not they have been asked yet. */
+  promptCount: number
 
   /** All null for a business without a Google Business Profile. */
   gbp: { rating: number | null; reviewCount: number | null; hasWebsite: boolean | null }
@@ -64,11 +72,31 @@ function buildSteps(d: ReportData): Step[] {
     })
   }
 
-  if (isLocal) {
+  /**
+   * Only when there is something to make consistent. Telling a business to use
+   * one phone number everywhere when the audit found no phone number at all is
+   * advice about a fact nobody checked — and the real problem is the opposite
+   * one, so it gets said instead.
+   */
+  if (isLocal && d.phoneCount === 0) {
+    steps.push({
+      title: 'Publish a phone number where it can be read',
+      meta: 'Minutes · no cost',
+      body: 'No phone number appears in the pages this audit could read. A local business that cannot be phoned from the page will not be recommended as one.',
+    })
+  } else if (isLocal && d.phoneCount > 1) {
     steps.push({
       title: 'Use one phone number everywhere',
-      meta: 'Under an hour · no cost',
+      meta: `${d.phoneCount} different numbers found · under an hour · no cost`,
       body: 'Search engines treat a consistent name, address and phone as a trust signal; mismatches work against you.',
+    })
+  }
+
+  if (d.clientRenderedPages > 0) {
+    steps.push({
+      title: 'Serve your words in the HTML',
+      meta: `${d.clientRenderedPages} of ${d.pageCount} pages affected · a developer task`,
+      body: 'Your pages assemble their copy in the browser. Crawlers that do not run JavaScript — including the index ChatGPT and Copilot retrieve through — see an empty page, so nothing on it can be quoted or ranked.',
     })
   }
 
@@ -118,6 +146,22 @@ export function renderReport(d: ReportData): string {
   const pct = d.totalAnswers ? Math.round((d.named / d.totalAnswers) * 100) : 0
   const topRival = d.competitors[0]
   const steps = buildSteps(d)
+
+  /**
+   * Whether any AI engine has actually been asked anything yet.
+   *
+   * Everything that reads as a measurement is gated on this. "0 of 0" rendered
+   * as a headline says the business was asked for and never named; what happened
+   * is that nobody asked. A client shown that number would be told a fact about
+   * their business that this document made up, which is the one thing a report
+   * whose whole claim is "every figure here is measured" cannot do.
+   */
+  const measured = d.totalAnswers > 0
+
+  /** Section numbers, counted as sections are emitted rather than guessed. */
+  let sectionNo = 0
+  const section = (title: string) =>
+    `<h2><span class="num">${String(++sectionNo).padStart(2, '0')}</span>${title}</h2>`
 
   return `<!doctype html>
 <html lang="en">
@@ -199,6 +243,7 @@ export function renderReport(d: ReportData): string {
   <p class="sub">${esc(d.clientDomain)} · ${esc(d.market)} · ${esc(d.generatedOn)}</p>
 </header>
 
+${measured ? `
 <div class="hero">
   <p class="big">${d.named} of ${d.totalAnswers}</p>
   <p class="cap">When customers ask AI for a business like yours, yours is named ${d.named === 0 ? 'never' : `${pct}% of the time`}.</p>
@@ -208,15 +253,40 @@ export function renderReport(d: ReportData): string {
     ? `Your business did not appear in a single answer.`
     : `Your business appeared in ${d.named}.`}
   ${topRival ? `<strong>${esc(topRival[0])}</strong> appeared in ${topRival[1]}.` : ''}</p>
-</div>
+</div>` : `
+<div class="callout warn">
+  <div class="label">Not measured yet</div>
+  <p style="margin:0 0 6px"><strong>No AI engine has been asked about this business yet, so this report makes no claim about how often it is named.</strong></p>
+  <p style="margin:0">${d.promptCount > 0
+    ? `${d.promptCount} customer questions have been written for it and are ready to run.`
+    : 'The question set has not been written yet.'}
+  What follows is the website audit: what the site publishes, measured against what the research links to being cited.</p>
+</div>`}
 
 <div class="kpis">
-  <div class="kpi"><div class="k">${d.totalAnswers}</div><div class="l">AI answers analysed</div></div>
+  ${measured
+    ? `<div class="kpi"><div class="k">${d.totalAnswers}</div><div class="l">AI answers analysed</div></div>`
+    : `<div class="kpi"><div class="k">${d.promptCount}</div><div class="l">Questions ready to ask</div></div>`}
   <div class="kpi"><div class="k">${d.pageCount}</div><div class="l">Pages audited</div></div>
   <div class="kpi"><div class="k">${d.criticalFindings.length}</div><div class="l">Critical issues found</div></div>
 </div>
 
-<h2><span class="num">01</span>Who AI recommends instead</h2>
+${d.markets.length > 1 ? `
+<h2>Market by market</h2>
+<p class="lede">You trade in ${d.markets.length} areas, and each is a separate contest — different competitors, a different map pack, a different set of answers. A single average would hide whichever one is weaker.</p>
+<div class="tbl-scroll"><table>
+  <thead><tr><th>Area</th><th>Places measured</th><th class="num-cell">Named in</th><th class="num-cell">Share</th></tr></thead>
+  <tbody>
+    ${d.markets.map((m) => {
+      const share = m.total > 0 ? `${Math.round((m.named / m.total) * 100)}%` : 'not measured'
+      return `<tr><td>${esc(m.label)}</td><td>${esc(m.locations.slice(0, 6).join(', '))}${m.locations.length > 6 ? ` +${m.locations.length - 6}` : ''}</td><td class="num-cell">${m.total > 0 ? `${m.named} of ${m.total}` : '—'}</td><td class="num-cell">${share}</td></tr>`
+    }).join('\n    ')}
+  </tbody>
+</table></div>
+` : ''}
+
+${measured && d.competitors.length > 0 ? `
+${section('Who AI recommends instead')}
 <p class="lede">These are the businesses named when a customer asks an AI assistant for help in your area.</p>
 <div class="tbl-scroll"><table>
   <thead><tr><th>Business</th><th class="num-cell">Times recommended</th></tr></thead>
@@ -224,10 +294,10 @@ export function renderReport(d: ReportData): string {
     ${d.competitors.slice(0, 8).map(([name, n]) => `<tr><td>${esc(name)}</td><td class="num-cell">${n}</td></tr>`).join('\n    ')}
     <tr class="client-row"><td>${esc(d.clientName)}</td><td class="num-cell">${d.named}</td></tr>
   </tbody>
-</table></div>
+</table></div>` : ''}
 
 ${d.cityLeaders.length ? `
-<h2><span class="num">02</span>Why they win: a page for every place</h2>
+${section('Why they win: a page for every place')}
 <p class="lede">We crawled the websites AI actually cited. The pattern is consistent.</p>
 <div class="tbl-scroll"><table>
   <thead><tr><th>Website</th><th class="num-cell">City pages</th><th style="width:150px"></th><th class="num-cell">Share</th></tr></thead>
@@ -253,7 +323,8 @@ ${d.cityLeaders.length ? `
   why it sits at the top of the plan below.
 </div>` : ''}
 
-<h2><span class="num">0${d.cityLeaders.length ? '3' : '2'}</span>The gap, measured</h2>
+${d.rivalCount > 0 ? `
+${section('The gap, measured')}
 <p class="lede">Your site against ${d.rivalCount} competitors AI recommends. Nationwide chains are excluded —
 comparing an independent business to a national operation is not a fair or useful target.</p>
 <div class="tbl-scroll"><table>
@@ -266,9 +337,9 @@ comparing an independent business to a national operation is not a fair or usefu
       return `<tr class="${worse ? 'worse' : ''}"><td><strong>${esc(g.label)}</strong>${g.note ? `<br><span style="font-size:12.5px;color:var(--muted)">${esc(g.note)}</span>` : ''}</td><td class="num-cell mine">${esc(String(g.client))}</td><td class="num-cell">${esc(String(g.rivals))}</td></tr>`
     }).join('\n    ')}
   </tbody>
-</table></div>
+</table></div>` : ''}
 
-<h2><span class="num">0${d.cityLeaders.length ? '4' : '3'}</span>What is holding you back</h2>
+${section('What is holding you back')}
 ${d.criticalFindings.map((f) => `
 <div class="finding">
   <div class="cat">Critical · ${esc(f.category.replace(/-/g, ' '))}</div>
@@ -284,7 +355,7 @@ ${d.highFindings.slice(0, 5).map((f) => `
   ${f.proposedText ? `<div class="fix"><b>Fix:</b> ${esc(f.proposedText)}</div>` : ''}
 </div>`).join('')}` : ''}
 
-<h2><span class="num">0${d.cityLeaders.length ? '5' : '4'}</span>The plan, in order</h2>
+${section('The plan, in order')}
 <p class="lede">Ordered by impact per hour of work. The first items cost nothing and take minutes.</p>
 
 ${steps.map((s, i) => `
@@ -295,7 +366,7 @@ ${steps.map((s, i) => `
 </div></div>`).join('')}
 
 ${d.evidence.length ? `
-<h2><span class="num">0${d.cityLeaders.length ? '6' : '5'}</span>Evidence</h2>
+${section('Evidence')}
 <p class="lede">Actual answers, captured on ${esc(d.generatedOn)}.</p>
 ${d.evidence.map((e) => `
 <div class="ev">
@@ -304,12 +375,19 @@ ${d.evidence.map((e) => `
   ${e.image ? `<img src="${e.image}" alt="screenshot of the AI answer">` : ''}
 </div>`).join('')}` : ''}
 
-<h2><span class="num">0${d.cityLeaders.length ? '7' : '6'}</span>How this was measured</h2>
+${section('How this was measured')}
 <ul class="tight">
-  <li><strong>${d.totalAnswers} questions</strong> asked across ${d.engines.length} AI assistants, phrased the way real customers write — including emergencies, brand-specific requests, pricing questions and "who do you recommend".</li>
-  <li>Every answer was <strong>saved in full and screenshotted</strong>. Nothing here is inferred from a summary.</li>
+  ${measured
+    ? `<li><strong>${d.totalAnswers} questions</strong> asked across ${d.engines.length} AI assistants, phrased the way real customers write — including emergencies, brand-specific requests, pricing questions and "who do you recommend".</li>
+  <li>Every answer was <strong>saved in full and screenshotted</strong>. Nothing here is inferred from a summary.</li>`
+    : `<li><strong>No AI engine has been asked yet.</strong> ${d.promptCount > 0 ? `${d.promptCount} questions are written and ready` : 'The question set is not written yet'}, and nothing in this document claims a visibility figure.</li>`}
   <li>Your website was read page by page — <strong>${d.pageCount} pages, ${d.paragraphCount} paragraphs</strong> — and scored on the factors published research links to AI visibility.</li>
-  <li>Competitor sites were <strong>crawled directly</strong>, and measured on exactly the same scale as yours.</li>
+  ${d.clientRenderedPages > 0
+    ? `<li><strong>${d.clientRenderedPages} of those pages served no readable text.</strong> Their copy is assembled in the browser, so what was audited is the structured data they publish — the same thing a crawler that does not run JavaScript is left with.</li>`
+    : ''}
+  ${d.rivalCount > 0
+    ? '<li>Competitor sites were <strong>crawled directly</strong>, and measured on exactly the same scale as yours.</li>'
+    : ''}
   <li>Every figure in this document is measured. Nothing is projected or estimated.</li>
 </ul>
 
@@ -322,8 +400,11 @@ ${d.evidence.map((e) => `
 </div>
 
 <div class="footnote">
-  Prepared for ${esc(d.clientName)} · ${esc(d.generatedOn)}<br>
-  Measured across ${d.engines.map((e) => `${esc(e.engine)} (${e.ok} answers)`).join(', ')}.
+  Prepared for ${esc(d.clientName)} · ${esc(d.generatedOn)}${
+    d.engines.length
+      ? `<br>Measured across ${d.engines.map((e) => `${esc(e.engine)} (${e.ok} answers)`).join(', ')}.`
+      : '<br>Website audit only — no AI engine has been asked about this business yet.'
+  }
 </div>
 
 </div></body></html>`

@@ -1,8 +1,9 @@
 import 'server-only'
 import { eq, inArray } from 'drizzle-orm'
 import { db, schema } from '../db'
-import { mentionsClient } from '../analysis/parse'
+import { isAnswer, mentionsClient } from '../analysis/parse'
 import { hydrateClient, type Client } from './client'
+import { groupByMarket, marketKeyOf } from './markets'
 
 /**
  * All dashboard reads. Every one is scoped to a single client — nothing here may
@@ -44,13 +45,19 @@ export function getOverview(client: Client) {
   const runIds = runs.map((r) => r.id)
   const findings = db.select().from(schema.findings).where(eq(schema.findings.clientId, client.id)).all()
 
-  const okRuns = runs.filter((r) => r.ok && r.answerText.trim())
+  const okRuns = runs.filter(isAnswer)
   const named = okRuns.filter((r) => mentionsClient(r.answerText, client)).length
 
+  /**
+   * Counted the same way as the headline. Splitting an ask that produced no
+   * answer away from one that produced a real one has to happen here too, or
+   * the per-engine rows add up to more than the total above them — which reads
+   * as a parser fault rather than as Google declining to show an AI Overview.
+   */
   const byEngine = new Map<string, { engine: string; ok: number; failed: number; named: number }>()
   for (const r of runs) {
     const e = byEngine.get(r.engine) ?? { engine: r.engine, ok: 0, failed: 0, named: 0 }
-    if (r.ok) {
+    if (isAnswer(r)) {
       e.ok++
       if (mentionsClient(r.answerText, client)) e.named++
     } else e.failed++
@@ -71,6 +78,29 @@ export function getOverview(client: Client) {
   const domains = new Map<string, number>()
   for (const c of citations) domains.set(c.domain, (domains.get(c.domain) ?? 0) + 1)
 
+  /**
+   * Visibility per trading area. A client in one place gets a single row, which
+   * the dashboard hides — the split only says something when there is more than
+   * one contest to lose.
+   */
+  const locations = db
+    .select()
+    .from(schema.locations)
+    .where(eq(schema.locations.clientId, client.id))
+    .all()
+    .filter((l) => l.isActive)
+  const marketKeyByLocation = new Map(locations.map((l) => [l.id, marketKeyOf(l)]))
+  const promptById = new Map(prompts.map((p) => [p.id, p]))
+  const marketTally = new Map(groupByMarket(locations).map((m) => [m.key, { named: 0, total: 0 }]))
+  for (const r of okRuns) {
+    const locationId = promptById.get(r.promptId)?.locationId
+    const key = locationId == null ? undefined : marketKeyByLocation.get(locationId)
+    const row = key ? marketTally.get(key) : undefined
+    if (!row) continue
+    row.total++
+    if (mentionsClient(r.answerText, client)) row.named++
+  }
+
   return {
     named,
     totalAnswers: okRuns.length,
@@ -83,12 +113,13 @@ export function getOverview(client: Client) {
     promptCount: prompts.filter((p) => p.isActive).length,
     wrongGeoPages: pages.filter((p) => p.wrongGeoHits > 0).length,
     wrongGeoHits: pages.reduce((a, p) => a + p.wrongGeoHits, 0),
-    locationCount: db
-      .select()
-      .from(schema.locations)
-      .where(eq(schema.locations.clientId, client.id))
-      .all()
-      .filter((l) => l.isActive).length,
+    locationCount: locations.length,
+    markets: groupByMarket(locations).map((m) => ({
+      label: m.label,
+      places: m.locations.map((l) => l.name),
+      named: marketTally.get(m.key)?.named ?? 0,
+      total: marketTally.get(m.key)?.total ?? 0,
+    })),
     criticalCount: findings.filter((f) => f.severity === 'critical').length,
     findingCount: findings.length,
   }

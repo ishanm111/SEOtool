@@ -5,6 +5,7 @@ import { askGoogleViaBrowser } from '../engines/google-browser'
 import { CHAT_ENGINES } from '../engines/chat-engines'
 import { askGoogle } from '../engines/dataforseo'
 import { resolveClient, clientLocations } from '../lib/resolve-client'
+import { groupByMarket, marketKeyOf } from '../lib/markets'
 import { loadEnv } from '../lib/env'
 import { arg, flag } from '../lib/args'
 
@@ -63,6 +64,49 @@ async function main() {
   }
 
   /**
+   * `--market=` measures one trading area at a time.
+   *
+   * A multi-market client multiplies the core set by the number of markets, and
+   * every prompt is asked of every engine at human pacing. Splitting the run by
+   * market keeps a session to a sane length and means a browser failure late on
+   * costs one market's answers rather than all of them.
+   */
+  const markets = groupByMarket(locations)
+  const marketArg = arg('market')
+  if (marketArg) {
+    const wantedMarkets = marketArg.split(',').map((s) => s.trim().toLowerCase()).filter(Boolean)
+    const matched = markets.filter((m) =>
+      wantedMarkets.some((w) => m.key === w || m.key.includes(w) || m.label.toLowerCase().includes(w)),
+    )
+    if (matched.length === 0) {
+      throw new Error(
+        `no market matches --market=${marketArg}. Markets for this client:\n` +
+          markets.map((m) => `  ${m.label} (${m.locations.map((l) => l.name).join(', ')})`).join('\n'),
+      )
+    }
+    const keep = new Set(matched.map((m) => m.key))
+    const locationInMarket = new Map(locations.map((l) => [l.id, keep.has(marketKeyOf(l))]))
+    const before = prompts.length
+    prompts = prompts.filter((p) => p.locationId != null && locationInMarket.get(p.locationId) === true)
+    console.log(
+      `--market=${marketArg} -> ${matched.map((m) => m.label).join(', ')}: ` +
+        `${prompts.length} of ${before} prompts (${before - prompts.length} skipped)`,
+    )
+    if (prompts.length === 0) throw new Error('that market has no prompts — run `npm run prompts` first')
+  } else if (markets.length > 1) {
+    const counts = new Map(markets.map((m) => [m.key, 0]))
+    for (const p of prompts) {
+      // A prompt can outlive its location being deactivated, so this may miss.
+      const loc = p.locationId == null ? undefined : locationById.get(p.locationId)
+      const key = loc ? marketKeyOf(loc) : undefined
+      if (key && counts.has(key)) counts.set(key, (counts.get(key) ?? 0) + 1)
+    }
+    console.log('markets in this run:')
+    for (const m of markets) console.log(`  ${m.label.padEnd(22)} ${counts.get(m.key)} prompts`)
+    console.log('  (run one at a time with --market="<name>")\n')
+  }
+
+  /**
    * Google can be read two ways:
    *   --google=api      DataForSEO — sees results from the client's own city
    *   --google=browser  a real browser — free, but sees them from THIS machine
@@ -88,9 +132,16 @@ async function main() {
 
   const context = await openBrowser(flag('headless'))
   const consecutiveFailures = new Map<string, number>()
-  const tally = new Map<string, { ok: number; failed: number; mentioned: number }>()
-  for (const e of engines) tally.set(e.name, { ok: 0, failed: 0, mentioned: 0 })
-  if (useGoogle) tally.set('google_aio', { ok: 0, failed: 0, mentioned: 0 })
+  /**
+   * `noAnswer` counts asks that succeeded without producing an answer to read.
+   * Google is recorded as successful when it returns organic results, whether or
+   * not it showed an AI Overview, and folding those into `ok` made a run report
+   * more answers than the analysis could find — the gap looked like a parser
+   * fault rather than what it is.
+   */
+  const tally = new Map<string, { ok: number; failed: number; noAnswer: number; mentioned: number }>()
+  for (const e of engines) tally.set(e.name, { ok: 0, failed: 0, noAnswer: 0, mentioned: 0 })
+  if (useGoogle) tally.set('google_aio', { ok: 0, failed: 0, noAnswer: 0, mentioned: 0 })
 
   const saveCitations = (runId: number, cites: { url: string; position: number }[]) => {
     if (cites.length === 0) return
@@ -206,6 +257,7 @@ async function main() {
         const stats = tally.get('google_aio')!
         if (g.ok) {
           stats.ok++
+          if (!g.aiOverviewText) stats.noAnswer++
           const named =
             client.aliases.some((a: string) => g.aiOverviewText.toLowerCase().includes(a)) ||
             g.localPack.some((l) => client.aliases.some((a: string) => l.title.toLowerCase().includes(a)))
@@ -236,7 +288,17 @@ async function main() {
 
   console.log('\n=== RESULT ===')
   for (const [name, s] of tally) {
-    console.log(`${name.padEnd(11)} ${s.ok} ok, ${s.failed} failed, client named in ${s.mentioned}/${s.ok}`)
+    const noAnswer = s.noAnswer > 0 ? `, ${s.noAnswer} with no AI Overview shown` : ''
+    console.log(
+      `${name.padEnd(11)} ${s.ok} ok, ${s.failed} failed${noAnswer}, client named in ${s.mentioned}/${s.ok}`,
+    )
+  }
+  const blind = [...tally.values()].reduce((a, s) => a + s.noAnswer, 0)
+  if (blind > 0) {
+    console.log(
+      `\n${blind} asks returned results but no AI Overview. Those are not answers and are not counted as any;` +
+        ' the map pack captured alongside them is still saved.',
+    )
   }
 }
 

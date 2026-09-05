@@ -1,6 +1,8 @@
 import type { Recommendation, RecommendInput, PageRow } from './types'
 import { FILL } from './types'
 import type { Client, ClientLocation } from '../lib/client'
+import type { ClientFacts } from '../onboard/questionnaire'
+import { isLocalBusinessType, isProductType, mostSpecificBusinessType } from '../lib/schema-types'
 
 /**
  * Generates JSON-LD structured data.
@@ -25,7 +27,12 @@ function offeringFor(page: PageRow, client: Client): string | null {
   )
 }
 
-function localBusinessNode(client: Client, page: PageRow, location: ClientLocation | null) {
+function localBusinessNode(
+  client: Client,
+  page: PageRow,
+  location: ClientLocation | null,
+  facts: ClientFacts,
+) {
   const id = `${page.url.replace(/\/$/, '')}#business`
   return {
     '@type': 'LocalBusiness',
@@ -38,17 +45,19 @@ function localBusinessNode(client: Client, page: PageRow, location: ClientLocati
       addressLocality: location?.name ?? FILL('city'),
       addressRegion: location?.region ?? FILL('state'),
       addressCountry: 'US',
-      streetAddress: FILL('street address, or delete this line if you only travel to customers'),
-      postalCode: FILL('ZIP code'),
+      streetAddress:
+        facts.street_address ??
+        FILL('street address, or delete this line if you only travel to customers'),
+      postalCode: facts.postal_code ?? FILL('ZIP code'),
     },
     ...(location
       ? { areaServed: [{ '@type': 'City', name: location.name }] }
       : {}),
-    priceRange: FILL('price range, e.g. $$'),
+    priceRange: facts.price_band ?? FILL('price range, e.g. $$'),
   }
 }
 
-function productNode(client: Client, page: PageRow) {
+function productNode(client: Client, page: PageRow, facts: ClientFacts) {
   return {
     '@type': 'Product',
     name: page.title.split(/[|–—]/)[0].trim() || page.slug.replace(/[-_]/g, ' '),
@@ -58,7 +67,7 @@ function productNode(client: Client, page: PageRow) {
     offers: {
       '@type': 'Offer',
       url: page.url,
-      priceCurrency: FILL('currency code, e.g. USD'),
+      priceCurrency: facts.currency ?? FILL('currency code, e.g. USD'),
       price: FILL('price'),
       availability: 'https://schema.org/InStock',
     },
@@ -87,7 +96,7 @@ function breadcrumbNode(page: PageRow) {
 }
 
 export function recommendSchema(input: RecommendInput): Recommendation[] {
-  const { client, locations, pages } = input
+  const { client, locations, pages, facts = {} } = input
   const out: Recommendation[] = []
   const isEcom = client.businessType === 'ecommerce'
 
@@ -97,13 +106,19 @@ export function recommendSchema(input: RecommendInput): Recommendation[] {
     const missing: string[] = []
 
     if (isEcom && page.pageType === 'product') {
-      if (!existing.some((t) => /^Product$/.test(t))) {
-        nodes.push(productNode(client, page))
+      if (!existing.some(isProductType)) {
+        nodes.push(productNode(client, page, facts))
         missing.push('Product')
       }
     } else if (!isEcom) {
-      if (!existing.some((t) => /LocalBusiness|HomeAndConstructionBusiness|ProfessionalService/.test(t))) {
-        nodes.push(localBusinessNode(client, page, locationFor(page, locations)))
+      /**
+       * Only when there is no business markup at all. A page already marked up
+       * as a LocalBusiness subtype — `LiquorStore`, `Dentist`, `AutoRepair` —
+       * has the signal, and proposing a generic `LocalBusiness` alongside it
+       * would talk the site down to a vaguer type than the one it chose.
+       */
+      if (!existing.some(isLocalBusinessType)) {
+        nodes.push(localBusinessNode(client, page, locationFor(page, locations), facts))
         missing.push('LocalBusiness')
       }
       const offering = offeringFor(page, client)
@@ -139,7 +154,11 @@ export function recommendSchema(input: RecommendInput): Recommendation[] {
       reason:
         `Missing ${missing.join(' and ')} structured data. This is invisible to visitors but tells search and AI engines ` +
         `exactly what this page is, which is one of the strongest signals for being cited. Paste inside a ` +
-        `<script type="application/ld+json"> tag before </head>.`,
+        `<script type="application/ld+json"> tag before </head>.` +
+        // Said plainly, so nobody reads this as "replace what you have".
+        (mostSpecificBusinessType(existing)
+          ? ` The page already declares ${mostSpecificBusinessType(existing)}, which is more specific than LocalBusiness — keep it. This block is an addition, not a replacement.`
+          : ''),
       priority: missing.includes('Product') || missing.includes('LocalBusiness') ? 76 : 52,
     })
   }

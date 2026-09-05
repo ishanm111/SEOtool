@@ -2,19 +2,25 @@ import readline from 'node:readline/promises'
 import { eq } from 'drizzle-orm'
 import { openDb, schema } from '../db/raw'
 import { detectClient, deriveWrongGeoTerms, type Detection } from '../onboard/detect'
-import { stateFromAbbreviation, normaliseState } from '../onboard/us-states'
-import { flag } from '../lib/args'
+import { stateFromAbbreviation, normaliseState, parseTypedPlace } from '../onboard/us-states'
+import { arg, flag } from '../lib/args'
 
 /**
  * Adds a client from nothing but a URL.
  *
  *   npx tsx src/scripts/add-client.ts https://example.com
  *   npx tsx src/scripts/add-client.ts https://example.com --dry-run
+ *   npx tsx src/scripts/add-client.ts https://example.com --states=TX --towns="Pasadena TX, Houston TX" --yes
  *
  * Detection is confident about some things (platform, page count) and uncertain
  * about others (which places a business genuinely serves). Everything is printed
  * before anything is written, and the uncertain parts are asked rather than
  * assumed — a wrong service area silently poisons every later measurement.
+ *
+ * The answers can also arrive as flags, which is the only way to run this from a
+ * script or a test. Without a terminal and without the flags it stops and says
+ * so: a prompt written to a closed stdin used to end the process quietly with a
+ * success code and nothing saved, which reads exactly like a run that worked.
  */
 
 
@@ -83,7 +89,46 @@ async function main() {
     return
   }
 
+  /**
+   * Answers supplied up front. `--yes` alone means "take the suggestion for
+   * everything", which is exactly what a human pressing return three times does.
+   */
+  const statesFlag = arg('states')
+  const townsFlag = arg('towns')
+  const assumeYes = flag('yes')
+  const interactive = process.stdin.isTTY === true
+
+  if (!interactive && !assumeYes && statesFlag === undefined && townsFlag === undefined) {
+    console.error(
+      '\nstdin is not a terminal and no answers were given, so the questions below cannot be asked.\n' +
+        'Re-run with the answers as flags, for example:\n' +
+        `  npx tsx src/scripts/add-client.ts ${url} --states=TX --towns="Pasadena TX, Houston TX" --yes\n` +
+        'or add --yes to accept the detected service area unchanged.',
+    )
+    process.exitCode = 1
+    return
+  }
+
   const rl = readline.createInterface({ input: process.stdin, output: process.stdout })
+
+  /**
+   * One question, answered by a flag, by the operator, or by the default.
+   *
+   * Every path returns a string, so a closed stdin can no longer leave a pending
+   * promise that never settles — which is what ended the process with nothing
+   * written and nothing said.
+   */
+  const ask = async (question: string, preset: string | undefined): Promise<string> => {
+    if (preset !== undefined) {
+      console.log(`${question}${preset}`)
+      return preset
+    }
+    if (!interactive) {
+      console.log(`${question}(assumed)`)
+      return ''
+    }
+    return (await rl.question(question)).trim()
+  }
 
   let servedStates: string[] = []
   let locations: { name: string; state: string }[] = []
@@ -92,7 +137,7 @@ async function main() {
     const suggested = d.states[0]?.state ?? ''
     console.log('\nWhich states does this business ACTUALLY serve?')
     console.log('This decides which places count as wrong-geography, so it matters.')
-    const answer = (await rl.question(`States, comma-separated${suggested ? ` [${suggested}]` : ''}: `)).trim()
+    const answer = await ask(`States, comma-separated${suggested ? ` [${suggested}]` : ''}: `, statesFlag)
     const raw = (answer || suggested).split(',').map((s) => s.trim()).filter(Boolean)
     servedStates = raw.map((s) => normaliseState(s)).filter((s): s is string => s !== null)
 
@@ -103,7 +148,11 @@ async function main() {
       if (inArea.length > 0) {
         console.log(`\n${inArea.length} places found in ${servedStates.join('/')}:`)
         console.log(`  ${inArea.map((p) => p.name).join(', ')}`)
-        const keep = (await rl.question('Use these as the service area? [Y/n] or type your own, comma-separated: ')).trim()
+        const keep = await ask(
+          'Use these as the service area? [Y/n] or type your own, comma-separated ' +
+            '(add the state per town when they differ, e.g. "Houston TX, Virginia Beach VA"): ',
+          townsFlag,
+        )
         if (keep === '' || /^y(es)?$/i.test(keep)) {
           locations = inArea.map((p) => ({ name: p.name, state: p.state }))
         } else if (!/^n(o)?$/i.test(keep)) {
@@ -111,17 +160,20 @@ async function main() {
             .split(',')
             .map((s) => s.trim())
             .filter(Boolean)
-            .map((name) => ({ name, state: servedStates[0] }))
+            .map((entry) => parseTypedPlace(entry, servedStates[0]))
         }
       } else {
         console.log(`\nNo places found in ${servedStates.join('/')} on the site itself.`)
-        const typed = (await rl.question('Type the towns served, comma-separated (or blank to skip): ')).trim()
+        const typed = await ask(
+          'Type the towns served, comma-separated (add the state per town when they differ, e.g. "Houston TX, Virginia Beach VA"): ',
+          townsFlag,
+        )
         if (typed) {
           locations = typed
             .split(',')
             .map((s) => s.trim())
             .filter(Boolean)
-            .map((name) => ({ name, state: servedStates[0] }))
+            .map((entry) => parseTypedPlace(entry, servedStates[0]))
         }
       }
     }
@@ -134,7 +186,7 @@ async function main() {
     console.log('  Pages mentioning these will be flagged as targeting the wrong area.')
   }
 
-  const go = (await rl.question(`\nSave "${d.name}" as a client? [Y/n] `)).trim()
+  const go = await ask(`\nSave "${d.name}" as a client? [Y/n] `, assumeYes ? 'y' : undefined)
   rl.close()
   if (/^n(o)?$/i.test(go)) {
     console.log('cancelled — nothing saved')

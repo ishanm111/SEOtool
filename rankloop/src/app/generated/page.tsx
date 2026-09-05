@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import { getRecommendations } from '@/lib/queries'
 import { NoClient } from '../_components/no-client'
+import { NeedsRun } from '../_components/ui'
 import { activeClient } from '@/lib/active-client'
 
 export const dynamic = 'force-dynamic'
@@ -22,7 +23,7 @@ function Placeholders({ text }: { text: string }) {
     <>
       {parts.map((part, i) =>
         part.startsWith('[[FILL:') ? (
-          <mark key={i} className="rounded bg-amber-200 px-1 text-amber-950">
+          <mark key={i} className="rounded bg-amber-soft px-1 text-amber">
             {part.replace(/^\[\[FILL:\s*/, '').replace(/\]\]$/, '')}
           </mark>
         ) : (
@@ -47,25 +48,25 @@ export default async function RecommendationsPage({
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Recommendations</h1>
-        <p className="mt-1 text-sm text-zinc-500">
+        <h1 className="display text-3xl">Recommendations</h1>
+        <p className="mt-1 text-sm text-ink-3">
           What to change, ranked by measured impact. Copy, metadata, structured data and pages that do
           not exist yet — never design.
         </p>
       </div>
 
       {data.total === 0 ? (
-        <div className="rounded-lg border border-amber-200 bg-amber-50 p-5 text-sm text-amber-800">
-          Nothing generated yet. Run{' '}
-          <code className="rounded bg-amber-100 px-1.5 py-0.5 text-xs">npm run recommend</code>
-        </div>
+        <NeedsRun
+          what="No recommendations yet"
+          step="The fix list is built from the site read and the findings."
+        />
       ) : (
         <>
           <div className="flex flex-wrap items-center gap-2">
             <Link
               href="/generated"
               className={`rounded-md border px-3 py-1.5 text-sm ${
-                !kind ? 'border-zinc-900 bg-zinc-900 text-white' : 'border-zinc-300 hover:bg-zinc-100'
+                !kind ? 'border-pine bg-pine text-white' : 'border-line-2 hover:bg-sink'
               }`}
             >
               All {data.total}
@@ -77,7 +78,7 @@ export default async function RecommendationsPage({
                   key={k}
                   href={`/generated?kind=${k}`}
                   className={`rounded-md border px-3 py-1.5 text-sm ${
-                    kind === k ? 'border-zinc-900 bg-zinc-900 text-white' : 'border-zinc-300 hover:bg-zinc-100'
+                    kind === k ? 'border-pine bg-pine text-white' : 'border-line-2 hover:bg-sink'
                   }`}
                 >
                   {KIND_LABEL[k] ?? k} {count}
@@ -87,7 +88,7 @@ export default async function RecommendationsPage({
           </div>
 
           {data.needingInput > 0 && (
-            <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+            <div className="rounded-lg border border-amber/25 bg-amber-soft p-4 text-sm text-amber">
               <strong>
                 {data.needingInput} of {data.total} need a fact from the business
               </strong>{' '}
@@ -98,37 +99,37 @@ export default async function RecommendationsPage({
 
           <div className="space-y-4">
             {data.rows.slice(0, 60).map((r) => (
-              <article key={r.id} className="rounded-lg border border-zinc-200 bg-white p-5">
+              <article key={r.id} className="card p-5">
                 <div className="flex flex-wrap items-center gap-2">
-                  <span className="rounded bg-zinc-900 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-white">
+                  <span className="pill bg-pine-soft text-pine-deep">
                     {KIND_LABEL[r.kind] ?? r.kind}
                   </span>
-                  <span className="text-xs tabular-nums text-zinc-500">priority {r.priority}</span>
+                  <span className="text-xs tabular-nums text-ink-3">priority {r.priority}</span>
                   {r.placeholderCount > 0 && (
-                    <span className="rounded bg-amber-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-amber-800">
+                    <span className="rounded bg-amber-soft px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-amber">
                       {r.placeholderCount} to fill in
                     </span>
                   )}
-                  <span className="ml-auto truncate text-xs text-zinc-500">{r.target}</span>
+                  <span className="ml-auto truncate text-xs text-ink-3">{r.target}</span>
                 </div>
 
-                <p className="mt-3 text-sm text-zinc-700">{r.reason}</p>
+                <p className="mt-3 text-sm text-ink-2">{r.reason}</p>
 
                 {r.currentValue && (
-                  <div className="mt-3 rounded border border-zinc-200 bg-zinc-50 p-3">
-                    <div className="text-[10px] font-bold uppercase tracking-wide text-zinc-500">Now</div>
-                    <p className="mt-1 whitespace-pre-wrap text-sm text-zinc-700">
+                  <div className="mt-3 rounded border border-line bg-sink p-3">
+                    <div className="eyebrow">Now</div>
+                    <p className="mt-1 whitespace-pre-wrap text-sm text-ink-2">
                       {r.currentValue.slice(0, 600)}
                       {r.currentValue.length > 600 && '…'}
                     </p>
                   </div>
                 )}
 
-                <div className="mt-2 rounded border border-emerald-200 bg-emerald-50 p-3">
-                  <div className="text-[10px] font-bold uppercase tracking-wide text-emerald-700">
+                <div className="mt-2 rounded border border-moss/25 bg-moss-soft p-3">
+                  <div className="text-[10px] font-bold uppercase tracking-wide text-moss-deep">
                     Proposed
                   </div>
-                  <pre className="mt-1 max-h-96 overflow-auto whitespace-pre-wrap text-sm leading-relaxed text-zinc-900">
+                  <pre className="mt-1 max-h-96 overflow-auto whitespace-pre-wrap text-sm leading-relaxed text-ink">
                     <Placeholders text={r.proposedValue} />
                   </pre>
                 </div>
@@ -137,9 +138,9 @@ export default async function RecommendationsPage({
           </div>
 
           {data.rows.length > 60 && (
-            <p className="text-sm text-zinc-500">
+            <p className="text-sm text-ink-3">
               Showing 60 of {data.rows.length}. Filter by type above, or use{' '}
-              <code className="rounded bg-zinc-100 px-1 py-0.5 text-xs">
+              <code className="rounded bg-sink px-1 py-0.5 text-xs">
                 npm run recommend -- --show={kind ?? 'new_page'}
               </code>
             </p>

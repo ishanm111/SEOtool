@@ -13,16 +13,16 @@ export default async function SiteAuditPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Site audit</h1>
-        <p className="mt-1 text-sm text-zinc-500">
+        <h1 className="display text-3xl">Site audit</h1>
+        <p className="mt-1 text-sm text-ink-3">
           All {pages.length} pages, sorted by how strongly they point outside the service area.{' '}
           {offenders.length} of them reference places outside the service area.
         </p>
       </div>
 
-      <div className="overflow-x-auto rounded-lg border border-zinc-200 bg-white">
+      <div className="overflow-x-auto card">
         <table className="w-full text-sm">
-          <thead className="border-b border-zinc-200 text-left text-xs uppercase tracking-wide text-zinc-500">
+          <thead className="border-b border-line text-left text-xs uppercase tracking-wide text-ink-3">
             <tr>
               <th className="px-4 py-3">Page</th>
               <th className="px-3 py-3 text-right">Words</th>
@@ -30,25 +30,25 @@ export default async function SiteAuditPage() {
               <th className="px-4 py-3">Which terms</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-zinc-100">
+          <tbody className="divide-y divide-line">
             {pages.map((p) => {
               const terms = JSON.parse(p.geoRefs || '[]') as string[]
               return (
-                <tr key={p.id} className="hover:bg-zinc-50">
+                <tr key={p.id} className="hover:bg-sink">
                   <td className="px-4 py-3">
                     <a href={p.url} target="_blank" rel="noreferrer" className="hover:underline">
                       /{p.slug}
                     </a>
                   </td>
-                  <td className="px-3 py-3 text-right tabular-nums text-zinc-500">{p.wordCount}</td>
+                  <td className="px-3 py-3 text-right tabular-nums text-ink-3">{p.wordCount}</td>
                   <td
                     className={`px-3 py-3 text-right tabular-nums font-medium ${
-                      p.wrongGeoHits > 0 ? 'text-red-600' : 'text-emerald-600'
+                      p.wrongGeoHits > 0 ? 'text-rose' : 'text-pine'
                     }`}
                   >
                     {p.wrongGeoHits}
                   </td>
-                  <td className="max-w-md px-4 py-3 text-xs text-zinc-500">
+                  <td className="max-w-md px-4 py-3 text-xs text-ink-3">
                     <span className="line-clamp-2">{terms.slice(0, 8).join(', ')}</span>
                   </td>
                 </tr>

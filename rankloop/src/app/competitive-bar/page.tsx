@@ -97,16 +97,16 @@ export default async function CompetitiveBarPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Competitive bar</h1>
-        <p className="mt-1 text-sm text-zinc-500">
+        <h1 className="display text-3xl">Competitive bar</h1>
+        <p className="mt-1 text-sm text-ink-3">
           The three businesses Google shows on the map, with their ratings and review counts. Ten
           minutes of looking, and it turns every review finding into a specific target.
         </p>
       </div>
 
-      <section className="rounded-lg border border-zinc-200 bg-zinc-50 p-5 text-sm">
+      <section className="rounded-lg border border-line bg-sink p-5 text-sm">
         <h2 className="font-semibold">How to fill this in</h2>
-        <ol className="mt-2 list-decimal space-y-1 pl-5 text-zinc-700">
+        <ol className="mt-2 list-decimal space-y-1 pl-5 text-ink-2">
           <li>
             Google <em>&ldquo;{client.offerings[0] ?? 'your service'} {locations[0]?.name ?? 'your town'}&rdquo;</em>
           </li>
@@ -116,23 +116,23 @@ export default async function CompetitiveBarPage() {
       </section>
 
       {rows.length > 0 && (
-        <section className="overflow-hidden rounded-lg border border-zinc-200 bg-white">
-          <div className="border-b border-zinc-200 px-4 py-3">
-            <h2 className="text-sm font-semibold uppercase tracking-wide text-zinc-500">Recorded</h2>
+        <section className="overflow-hidden card">
+          <div className="border-b border-line px-4 py-3">
+            <h2 className="eyebrow">Recorded</h2>
           </div>
           <table className="w-full text-sm">
-            <tbody className="divide-y divide-zinc-100">
+            <tbody className="divide-y divide-line">
               {rows.map((r) => (
                 <tr key={r.id}>
-                  <td className="px-4 py-2 tabular-nums text-zinc-500">{r.rank}</td>
+                  <td className="px-4 py-2 tabular-nums text-ink-3">{r.rank}</td>
                   <td className="px-4 py-2 font-medium">{r.businessName}</td>
                   <td className="px-4 py-2 text-right tabular-nums">{r.rating ?? '?'}★</td>
-                  <td className="px-4 py-2 text-right tabular-nums text-zinc-600">
+                  <td className="px-4 py-2 text-right tabular-nums text-ink-2">
                     {r.reviewCount ?? '?'} reviews
                   </td>
                 </tr>
               ))}
-              <tr className="bg-zinc-50 font-semibold">
+              <tr className="bg-sink font-semibold">
                 <td className="px-4 py-2" />
                 <td className="px-4 py-2">{client.name}</td>
                 <td className="px-4 py-2 text-right tabular-nums">
@@ -145,7 +145,7 @@ export default async function CompetitiveBarPage() {
             </tbody>
           </table>
           {gap !== null && gap > 0 && (
-            <div className="border-t border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
+            <div className="border-t border-rose/25 bg-rose-soft px-4 py-3 text-sm text-rose">
               <strong>{gap} reviews behind the leader.</strong> That is the target — a number, not
               &ldquo;get more reviews&rdquo;.
             </div>
@@ -153,18 +153,18 @@ export default async function CompetitiveBarPage() {
         </section>
       )}
 
-      <form action={save} className="space-y-4 rounded-lg border border-zinc-200 bg-white p-5">
+      <form action={save} className="space-y-4 card p-5">
         <input type="hidden" name="clientId" value={client.id} />
 
         {locations.length > 0 && (
           <div>
-            <label htmlFor="locationId" className="text-xs font-bold uppercase tracking-wide text-zinc-500">
+            <label htmlFor="locationId" className="text-xs font-bold uppercase tracking-wide text-ink-3">
               Which place
             </label>
             <select
               id="locationId"
               name="locationId"
-              className="mt-1 block w-full max-w-xs rounded-md border border-zinc-300 px-2 py-1.5 text-sm"
+              className="mt-1 block w-full max-w-xs rounded-md border border-line-2 px-2 py-1.5 text-sm"
             >
               {locations.map((l) => (
                 <option key={l.id} value={l.id}>
@@ -180,12 +180,12 @@ export default async function CompetitiveBarPage() {
             const existing = rows.find((r) => r.rank === rank)
             return (
               <div key={rank} className="grid gap-2 sm:grid-cols-[2rem_1fr_6rem_8rem]">
-                <div className="flex items-center text-sm font-semibold text-zinc-500">{rank}.</div>
+                <div className="flex items-center text-sm font-semibold text-ink-3">{rank}.</div>
                 <input
                   name={`name${rank}`}
                   defaultValue={existing?.businessName ?? ''}
                   placeholder="Business name"
-                  className="rounded-md border border-zinc-300 px-2 py-1.5 text-sm"
+                  className="rounded-md border border-line-2 px-2 py-1.5 text-sm"
                 />
                 <input
                   name={`rating${rank}`}
@@ -195,7 +195,7 @@ export default async function CompetitiveBarPage() {
                   max="5"
                   defaultValue={existing?.rating ?? ''}
                   placeholder="4.8"
-                  className="rounded-md border border-zinc-300 px-2 py-1.5 text-sm tabular-nums"
+                  className="rounded-md border border-line-2 px-2 py-1.5 text-sm tabular-nums"
                 />
                 <input
                   name={`reviews${rank}`}
@@ -203,7 +203,7 @@ export default async function CompetitiveBarPage() {
                   min="0"
                   defaultValue={existing?.reviewCount ?? ''}
                   placeholder="212"
-                  className="rounded-md border border-zinc-300 px-2 py-1.5 text-sm tabular-nums"
+                  className="rounded-md border border-line-2 px-2 py-1.5 text-sm tabular-nums"
                 />
               </div>
             )
@@ -212,14 +212,13 @@ export default async function CompetitiveBarPage() {
 
         <button
           type="submit"
-          className="rounded-md bg-zinc-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-zinc-700"
+          className="btn btn-primary"
         >
           Save
         </button>
-        <p className="text-xs text-zinc-500">
-          Saving replaces whatever is recorded for this place. Re-run{' '}
-          <code className="rounded bg-zinc-100 px-1 py-0.5">analyze.ts</code> afterwards to fold the
-          numbers into the findings.
+        <p className="text-xs text-ink-3">
+          Saving replaces whatever is recorded for this place. Start a run afterwards — the
+          findings only pick these numbers up when the analysis step runs again.
         </p>
       </form>
     </div>

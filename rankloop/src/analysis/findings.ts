@@ -1,6 +1,7 @@
 import { RATING_THRESHOLDS } from '../config'
 import type { Client, ClientLocation } from '../lib/client'
 import { hasGoogleProfile } from '../lib/client'
+import { hasBusinessSchema } from '../lib/schema-types'
 
 export type NewFinding = {
   targetType: 'site' | 'page' | 'paragraph' | 'offsite'
@@ -21,6 +22,8 @@ type PageRow = {
   metaDescription: string
   text: string
   wordCount: number
+  /** Words the page served as HTML, before any structured-data fallback. */
+  renderedWordCount?: number
   schemaTypes: string
   pageType: string
   geoRefs: string
@@ -59,6 +62,13 @@ type BarRow = {
   rank: number
 }
 
+export type MarketRate = {
+  label: string
+  named: number
+  total: number
+  locations: string[]
+}
+
 const SEVERITY_ORDER = { critical: 0, high: 1, medium: 2, low: 3 } as const
 
 const list = (items: string[], max = 8) =>
@@ -80,10 +90,13 @@ export function buildFindings(input: {
   paragraphs: ParagraphRow[]
   runs: RunRow[]
   clientMentionRate: { named: number; total: number }
+  /** One row per market, so a business visible in one place and invisible in another reads as two facts. */
+  marketRates?: MarketRate[]
   competitors?: CompetitorRow[]
   competitiveBar?: BarRow[]
 }): NewFinding[] {
   const { client, locations, pages, paragraphs, runs, clientMentionRate } = input
+  const marketRates = input.marketRates ?? []
   const competitors = input.competitors ?? []
   const bar = input.competitiveBar ?? []
   const out: NewFinding[] = []
@@ -154,14 +167,19 @@ export function buildFindings(input: {
   }
 
   // ── 4. Structured data.
-  const businessSchema = isEcom ? /Product|Offer/i : /LocalBusiness|HomeAndConstructionBusiness|Service/i
+  /**
+   * Subtypes count. A site that marks itself up as `LiquorStore` or `Dentist`
+   * has LocalBusiness markup — schema.org is a hierarchy — and telling its owner
+   * otherwise is both wrong and actively harmful, because the fix on offer
+   * replaces a precise type with a vaguer one.
+   */
   const schemaLabel = isEcom ? 'Product' : 'LocalBusiness or Service'
   // Product markup belongs on product pages. Demanding it of an about page or a
   // category listing would inflate the count and point at the wrong fix.
   const schemaScope = isEcom ? pages.filter((p) => p.pageType === 'product') : pages
   const noBusinessSchema = schemaScope.filter((p) => {
     const types = JSON.parse(p.schemaTypes || '[]') as string[]
-    return !types.some((t) => businessSchema.test(t))
+    return !hasBusinessSchema(types, client.businessType)
   })
   if (noBusinessSchema.length > 0) {
     out.push({
@@ -171,6 +189,30 @@ export function buildFindings(input: {
       issue: `${noBusinessSchema.length} of ${schemaScope.length} ${isEcom ? 'product ' : ''}pages have no ${schemaLabel} structured data. This is one of the strongest signals for being cited in an AI answer.`,
       proposedText: `Add ${schemaLabel} structured data across the site, plus FAQPage markup wherever there is a question-and-answer block.`,
       evidence: list(noBusinessSchema.map((p) => `/${p.slug}`), 10),
+    })
+  }
+
+  /**
+   * Pages whose copy is assembled in the browser.
+   *
+   * This one is reported before anything about wording, because it decides
+   * whether the wording is ever read. ChatGPT, Copilot and Meta AI retrieve
+   * through Bing's index, and an engine that does not run JavaScript sees the
+   * served HTML — which on these pages is an empty container.
+   */
+  const clientRendered = pages.filter((p) => p.renderedWordCount !== undefined && p.renderedWordCount < 50)
+  if (clientRendered.length > 0) {
+    out.push({
+      targetType: 'site',
+      category: 'javascript-only-content',
+      severity: 'critical',
+      issue:
+        `${clientRendered.length} of ${pages.length} pages serve no readable text — the copy is assembled in the browser. ` +
+        `A crawler that does not run JavaScript sees an empty page, so there is nothing to quote and nothing to rank.`,
+      proposedText:
+        'Server-render the copy, or pre-render it at build time, so the words are in the HTML that arrives. ' +
+        'Until then the structured data is the only thing about this business an engine can read.',
+      evidence: list(clientRendered.map((p) => `/${p.slug}`), 10),
     })
   }
 
@@ -270,6 +312,7 @@ export function buildFindings(input: {
   }
 
   // ── 9. Whether the engines actually name the business.
+  const multiMarket = marketRates.length > 1
   if (clientMentionRate.total > 0) {
     const { named, total } = clientMentionRate
     const pct = Math.round((named / total) * 100)
@@ -277,13 +320,59 @@ export function buildFindings(input: {
       targetType: 'offsite',
       category: 'ai-visibility',
       severity: named === 0 ? 'critical' : pct < 25 ? 'high' : 'medium',
-      issue: `${client.name} is named in ${named} of ${total} AI answers (${pct}%).`,
+      issue:
+        `${client.name} is named in ${named} of ${total} AI answers (${pct}%)` +
+        (multiMarket ? ` across all ${marketRates.length} markets combined.` : '.'),
       proposedText:
         named === 0
           ? 'The business is invisible to AI search. Fix the geography first, then the off-site presence, then the on-page work — in that order.'
           : 'Grow the share of answers by adding the missing pages, statistics and FAQ blocks, and by getting cited on the third-party sites the engines already quote.',
       evidence: `${runs.filter((r) => r.ok).length} successful runs across ${new Set(runs.map((r) => r.engine)).size} engines.`,
     })
+  }
+
+  /**
+   * ── 9b. The same question, market by market.
+   *
+   * A combined percentage is the average of contests that have nothing to do
+   * with each other. Two branches a hundred miles apart face different rivals
+   * and a different map pack, and a business can be the top recommendation in
+   * one while being absent from the other. Reported as one number, the strong
+   * market hides the weak one and the client fixes the wrong thing.
+   */
+  if (multiMarket) {
+    for (const m of marketRates.filter((r) => r.total > 0)) {
+      const pct = Math.round((m.named / m.total) * 100)
+      out.push({
+        targetType: 'offsite',
+        category: 'ai-visibility-market',
+        severity: m.named === 0 ? 'critical' : pct < 25 ? 'high' : 'medium',
+        issue: `${client.name} is named in ${m.named} of ${m.total} AI answers about ${m.label} (${pct}%).`,
+        proposedText:
+          m.named === 0
+            ? `The business is invisible to AI search in ${m.label}. This market needs its own location pages, its own Google Business Profile listing and its own reviews — presence in another market does not carry across.`
+            : `Grow the share of ${m.label} answers with pages, statistics and FAQ blocks written for that market specifically, and citations on the third-party sites the engines quote there.`,
+        evidence: `Places measured: ${list(m.locations, 8)}.`,
+      })
+    }
+
+    /**
+     * A market with no answers at all is not a good result — it is a gap in the
+     * measurement, and saying nothing about it would read as "nothing wrong".
+     */
+    const unmeasured = marketRates.filter((r) => r.total === 0)
+    if (unmeasured.length > 0) {
+      out.push({
+        targetType: 'offsite',
+        category: 'unmeasured-market',
+        severity: 'medium',
+        issue: `${unmeasured.length} of the ${marketRates.length} markets served have no AI answers recorded, so their visibility is unknown rather than good.`,
+        proposedText: `Run a measurement pass for ${list(unmeasured.map((m) => m.label), 6)} before drawing any conclusion about those places.`,
+        evidence: unmeasured
+          .map((m) => `${m.label} (${list(m.locations, 4)})`)
+          .join('; '),
+      })
+    }
   }
 
   // ── 10. Google Business Profile. Only meaningful when the business has one.
@@ -426,13 +515,39 @@ export function buildFindings(input: {
 
     if (leaders.length > 0) {
       const avgCity = Math.round(leaders.reduce((a, c) => a + c.cityPageCount, 0) / leaders.length)
+      /**
+       * Counted, not assumed.
+       *
+       * This used to end "This site has none", which is true of most clients and
+       * badly wrong for the ones who already built the pages — and being told to
+       * publish pages that exist is how a client stops believing the rest of the
+       * report. Where the count is healthy the gap is what is ON the pages, so
+       * the advice changes with it.
+       */
+      const ownCityPages = pages.filter((p) =>
+        locations.some((l) => {
+          const slug = l.name.toLowerCase().replace(/\s+/g, '-')
+          const own = p.slug.toLowerCase()
+          return own.includes(slug) || own.includes(slug.replace(/-/g, ''))
+        }),
+      ).length
+
+      const standing =
+        ownCityPages === 0
+          ? 'This site has none.'
+          : ownCityPages >= avgCity
+            ? `This site has ${ownCityPages}, which matches them on count.`
+            : `This site has ${ownCityPages}.`
+
       out.push({
         targetType: 'site',
         category: 'competitor-location-pages',
-        severity: 'critical',
-        issue: `${leaders.length} of ${localRivals.length} competitors AI recommends are built on location pages, averaging ${avgCity} each. This site has none.`,
+        severity: ownCityPages >= avgCity ? 'medium' : 'critical',
+        issue: `${leaders.length} of ${localRivals.length} competitors AI recommends are built on location pages, averaging ${avgCity} each. ${standing}`,
         proposedText:
-          'Publish one page per place served, then keep adding them. This is the clearest content pattern among the competitors that win.',
+          ownCityPages >= avgCity
+            ? 'The pages exist, so the gap is what is on them. Compare them against the rivals listed here for depth, structured data and concrete numbers before writing any new ones.'
+            : 'Publish one page per place served, then keep adding them. This is the clearest content pattern among the competitors that win.',
         evidence: leaders
           .map((c) => {
             const pct = c.pageCount ? Math.round((c.cityPageCount / c.pageCount) * 100) : 0
