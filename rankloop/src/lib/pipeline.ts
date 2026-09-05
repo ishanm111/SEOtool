@@ -103,7 +103,14 @@ export const ALL_STEP_KEYS = PIPELINE.map((s) => s.key)
  */
 export const DESK_STEP_KEYS: StepKey[] = ['ingest', 'competitors', 'analyze', 'recommend', 'report']
 
-export const RUN_STATUSES = ['queued', 'running', 'done', 'failed', 'cancelled'] as const
+/**
+ * `paused` is a run that is still alive and holding what it holds.
+ *
+ * It is not `cancelled` and not `queued`: the child process is where it was,
+ * the signed-in browser is still spoken for, and pressing resume carries on
+ * from the question it stopped on rather than starting the step again.
+ */
+export const RUN_STATUSES = ['queued', 'running', 'paused', 'done', 'failed', 'cancelled'] as const
 export type RunStatus = (typeof RUN_STATUSES)[number]
 
 /**
@@ -115,6 +122,10 @@ export type StepStatus = 'pending' | 'waiting' | 'running' | 'done' | 'failed' |
 
 export const isFinished = (status: string) =>
   status === 'done' || status === 'failed' || status === 'cancelled'
+
+/** Alive: working, waiting its turn, or held by a person. */
+export const isLive = (status: string) =>
+  status === 'running' || status === 'queued' || status === 'paused'
 
 /** Parses the JSON column, never throwing — a bad row must not take a page down. */
 export function parseStepKeys(raw: string): StepKey[] {

@@ -138,6 +138,7 @@ export function StatusTag({ status }: { status: string }) {
   const map: Record<string, { tone: Tone; label: string; live?: boolean }> = {
     queued: { tone: 'info', label: 'Queued' },
     running: { tone: 'brand', label: 'Running', live: true },
+    paused: { tone: 'warn', label: 'Paused' },
     done: { tone: 'good', label: 'Done' },
     failed: { tone: 'bad', label: 'Failed' },
     cancelled: { tone: 'neutral', label: 'Stopped' },

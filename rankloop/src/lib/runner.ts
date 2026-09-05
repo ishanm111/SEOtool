@@ -20,7 +20,21 @@ import { loadFacts } from './facts'
  * restart still shows what happened rather than an empty screen.
  */
 
-type Live = { child: ChildProcess | null; cancelled: boolean }
+type Live = {
+  child: ChildProcess | null
+  cancelled: boolean
+  paused: boolean
+  /**
+   * Whether this run's steps were started knowing how to be held.
+   *
+   * The live map survives a server reload, so a run already in flight when the
+   * console is updated is being driven by the code it started under — its
+   * children were never told which run they belong to and cannot be paused.
+   * Refusing is the honest answer; marking it "paused" on screen while it
+   * carried on measuring would not be.
+   */
+  gated: boolean
+}
 
 /**
  * Survives a hot reload. Without this the dev server would lose track of a
@@ -149,7 +163,7 @@ function competitorsFromFacts(clientId: number): string[] {
   }
 }
 
-function argsFor(step: StepKey, clientId: number, opts: RunOptions): string[] {
+function argsFor(step: StepKey, clientId: number, runId: number, opts: RunOptions): string[] {
   const def = STEP_BY_KEY.get(step)
   if (!def) throw new Error(`unknown pipeline step: ${step}`)
 
@@ -158,6 +172,13 @@ function argsFor(step: StepKey, clientId: number, opts: RunOptions): string[] {
   // Every script that asks a question has a flag meaning "take the default",
   // because there is no terminal here to answer it in.
   if (step === 'prompts') args.push('--yes')
+
+  /**
+   * Every step is told which run it belongs to, so a long one can ask whether
+   * it has been paused. Nothing else uses it, and a script run by hand simply
+   * never receives it.
+   */
+  args.push(`--run=${runId}`)
 
   if (step === 'measure') {
     if (opts.full) args.push('--all')
@@ -185,7 +206,7 @@ export function reconcileStaleRuns() {
   const stuck = db
     .select()
     .from(schema.pipelineRuns)
-    .where(inArray(schema.pipelineRuns.status, ['running', 'queued']))
+    .where(inArray(schema.pipelineRuns.status, ['running', 'queued', 'paused']))
     .all()
     .filter((r) => !live.has(r.id))
 
@@ -233,7 +254,7 @@ export function activeRunForClient(clientId: number): number | null {
     .where(
       and(
         eq(schema.pipelineRuns.clientId, clientId),
-        inArray(schema.pipelineRuns.status, ['running', 'queued']),
+        inArray(schema.pipelineRuns.status, ['running', 'queued', 'paused']),
       ),
     )
     .all()
@@ -298,6 +319,15 @@ export function cancelRun(runId: number) {
     return false
   }
   entry.cancelled = true
+  // Cleared so a held run stops waiting and finishes stopping, and so the
+  // child's own gate lets it reach the signal it has just been sent.
+  entry.paused = false
+  db.update(schema.pipelineRuns)
+    .set({ status: 'running' })
+    .where(
+      and(eq(schema.pipelineRuns.id, runId), eq(schema.pipelineRuns.status, 'paused')),
+    )
+    .run()
   entry.child?.kill('SIGTERM')
   /**
    * A run waiting for a free slot or for the browser has no child to kill.
@@ -307,6 +337,58 @@ export function cancelRun(runId: number) {
   abandon(gates.runs, runId)
   abandon(gates.browser, runId)
   return true
+}
+
+/**
+ * Holds a run where it is, without giving up anything it holds.
+ *
+ * The child process stays alive and the signed-in browser stays this run's, so
+ * resuming carries on from the question it stopped on. That is the only useful
+ * meaning of "pause" here: the measurement step re-asks every question from the
+ * top if it is restarted, so a pause that killed it would cost an hour to undo.
+ *
+ * A step notices at its next unit of work rather than instantly — between two
+ * questions, never in the middle of collecting one answer.
+ */
+export function pauseRun(runId: number): boolean {
+  const entry = live.get(runId)
+  if (!entry || entry.cancelled || !entry.gated) return false
+  entry.paused = true
+  db.update(schema.pipelineRuns)
+    .set({ status: 'paused' })
+    .where(eq(schema.pipelineRuns.id, runId))
+    .run()
+  return true
+}
+
+/** Lets a held run carry on. */
+export function resumeRun(runId: number): boolean {
+  const entry = live.get(runId)
+  if (!entry) {
+    // Nothing is holding it: the row is a leftover, and saying so beats a
+    // button that appears to work and changes nothing.
+    reconcileStaleRuns()
+    return false
+  }
+  entry.paused = false
+  db.update(schema.pipelineRuns)
+    .set({ status: 'running' })
+    .where(eq(schema.pipelineRuns.id, runId))
+    .run()
+  return true
+}
+
+/**
+ * Waits out a pause between two steps.
+ *
+ * Inside a step the child does its own waiting through the run row; between
+ * steps there is no child, so the runner does it here. A run cancelled while
+ * held stops waiting immediately rather than starting the next step.
+ */
+async function holdWhilePaused(runId: number) {
+  while (live.get(runId)?.paused === true && live.get(runId)?.cancelled !== true) {
+    await new Promise((resolve) => setTimeout(resolve, 500))
+  }
 }
 
 /** Appends output to a step, keeping only the tail a person would ever read. */
@@ -339,7 +421,12 @@ async function runStep(
       stdio: ['ignore', 'pipe', 'pipe'],
     })
 
-    live.set(runId, { child, cancelled: live.get(runId)?.cancelled ?? false })
+    live.set(runId, {
+      child,
+      cancelled: live.get(runId)?.cancelled ?? false,
+      paused: live.get(runId)?.paused ?? false,
+      gated: live.get(runId)?.gated ?? true,
+    })
 
     /**
      * Output is buffered and flushed on a timer rather than written per chunk.
@@ -384,7 +471,7 @@ async function execute(runId: number, clientId: number, steps: StepKey[], opts: 
    * the parallel-run cap has no child process yet. Without a place here it
    * would be read as the wreckage of a server restart and failed on the spot.
    */
-  live.set(runId, { child: null, cancelled: false })
+  live.set(runId, { child: null, cancelled: false, paused: false, gated: true })
 
   const startedNow = await enter(gates.runs, runId)
   if (!startedNow) {
@@ -418,6 +505,10 @@ async function execute(runId: number, clientId: number, steps: StepKey[], opts: 
   let cancelled = false
 
   for (const row of stepRows) {
+    // Held between steps by the runner itself; held inside a step by the child,
+    // which reads the same run row.
+    await holdWhilePaused(runId)
+
     // A run can be stopped between steps, or while queued for the browser.
     if (live.get(runId)?.cancelled) cancelled = true
 
@@ -466,7 +557,7 @@ async function execute(runId: number, clientId: number, steps: StepKey[], opts: 
 
     let result: { code: number; cancelled: boolean }
     try {
-      result = await runStep(runId, row.id, argsFor(row.stepKey as StepKey, clientId, opts))
+      result = await runStep(runId, row.id, argsFor(row.stepKey as StepKey, clientId, runId, opts))
     } catch (err) {
       appendLog(row.id, `\n${err instanceof Error ? err.message : String(err)}\n`)
       result = { code: 1, cancelled: false }

@@ -4,6 +4,8 @@ import { resolveClient } from '../lib/resolve-client'
 import { adapterFor } from '../ingest/adapters'
 import { splitContent } from '../ingest/split'
 import { auditGeo, countStats, countSuperlatives, readingEase, wordCount } from '../ingest/score'
+import { arg } from '../lib/args'
+import { waitIfPaused } from '../lib/pause-gate'
 
 /**
  * Pulls the client's site into the database and scores every paragraph.
@@ -46,7 +48,13 @@ async function main() {
   let totalParagraphs = 0
   const geoOffenders: Array<{ slug: string; hits: number }> = []
 
+  /** The console's run id, absent when this was started by hand. */
+  const pipelineRunId = Number(arg('run')) || null
+
   for (const wp of wpPages) {
+    // Held between pages, so a pause never leaves half a page written.
+    await waitIfPaused(pipelineRunId)
+
     const { plainText, blocks } = splitContent(wp.contentHtml)
     const geo = auditGeo(
       [wp.slug, wp.title, wp.metaDescription, plainText].join(' '),

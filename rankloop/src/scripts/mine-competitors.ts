@@ -5,6 +5,7 @@ import { isNationalChain, profileCompetitor } from '../analysis/competitors'
 import { countStats, countSuperlatives, wordCount } from '../ingest/score'
 import { NOT_A_DIRECT_COMPETITOR } from '../config'
 import { arg } from '../lib/args'
+import { waitIfPaused } from '../lib/pause-gate'
 
 /**
  * Crawls every domain the AI engines cited for this client, plus any resolved by
@@ -106,7 +107,13 @@ async function main() {
 
   db.delete(schema.competitors).where(eq(schema.competitors.clientId, client.id)).run()
 
+  /** The console's run id, absent when this was started by hand. */
+  const pipelineRunId = Number(arg('run')) || null
+
   for (const [domain, { citationCount }] of targets) {
+    // Held between competitors, never in the middle of crawling one.
+    await waitIfPaused(pipelineRunId)
+
     process.stdout.write(`  ${domain.padEnd(34)} `)
     const p = await profileCompetitor(domain, locationNames)
 
