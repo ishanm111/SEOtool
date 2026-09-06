@@ -3,7 +3,7 @@ import path from 'node:path'
 import { NextResponse } from 'next/server'
 import { db, schema } from '@/db'
 import { eq } from 'drizzle-orm'
-import { REPORTS_DIR, reportFileFor } from '@/lib/report-file'
+import { REPORTS_DIR, fixPackFileFor, reportFileFor } from '@/lib/report-file'
 
 /**
  * Serves a generated audit as its own document, so the console can show the
@@ -44,5 +44,8 @@ export async function GET(request: Request) {
 
   const domain = params.get('domain')
   if (!domain) return new NextResponse('missing domain or run', { status: 400 })
-  return serve(reportFileFor(domain))
+
+  // `doc=fix-pack` is the working document — every change in full, for a site
+  // the console cannot publish to.
+  return serve(params.get('doc') === 'fix-pack' ? fixPackFileFor(domain) : reportFileFor(domain))
 }
