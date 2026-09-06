@@ -2,6 +2,7 @@ import Link from 'next/link'
 import type { ClientCard as CardData } from '@/lib/run-queries'
 import { BUSINESS_TYPE_LABELS } from '@/config'
 import { Pill, StatusTag, timeAgo } from './ui'
+import { DeleteClient } from './delete-client'
 import { RunControls } from './run-controls'
 import { StartRun } from './start-run'
 import { SwitchToClient } from './switch-to-client'
@@ -121,6 +122,25 @@ export function ClientCard({ card: c }: { card: CardData }) {
             disabledReason={c.activeRun ? `Run #${c.activeRun.id} is already going` : undefined}
           />
         </div>
+      </div>
+
+      <div className="mt-3">
+        <DeleteClient
+          clientId={c.client.id}
+          name={c.client.name}
+          counts={{
+            answers: c.answerCount,
+            findings: c.findingCount,
+            recommendations: c.recommendationCount,
+            runs: c.runCount,
+          }}
+          appliedFixes={c.appliedFixes}
+          busyReason={
+            c.activeRun
+              ? `Run #${c.activeRun.id} is going. Stop it first — deleting a client underneath a run leaves the step it is on writing to rows that no longer exist.`
+              : null
+          }
+        />
       </div>
     </article>
   )
