@@ -2,6 +2,7 @@ import * as cheerio from 'cheerio'
 import { splitContent } from '../ingest/split'
 import { isFaqType, isLocalBusinessType } from '../lib/schema-types'
 import { countStats, countSuperlatives, readingEase, wordCount } from '../ingest/score'
+import { deriveAliases } from '../lib/client'
 
 /**
  * Crawls a competitor's site the way an AI engine would read it, and measures
@@ -262,4 +263,95 @@ export async function profileCompetitor(
     phones: [...phones],
     ok: true,
   }
+}
+
+/**
+ * Tying a domain the engines cited to the business name they wrote in prose.
+ *
+ * These arrive separately and have to be reunited: a citation is a link, a
+ * mention is a phrase in a sentence, and only together do they say "this rival
+ * was named nine times and here is their site". Matching them used to compare
+ * the first ten characters of the compacted full name against the domain, which
+ * fails exactly where the client matcher failed — nobody registers a domain
+ * containing their whole name. "Spec's Wines, Spirits & Finer Foods" trades at
+ * specsonline.com, and the tool recorded them as never mentioned.
+ *
+ * So the same shortened forms the client is matched by are tried here, and the
+ * strongest match wins rather than the first one found. A weak match is refused
+ * outright: a competitor row carrying another business's mention count is worse
+ * than one carrying none, because it is read as a measurement.
+ */
+
+const compact = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, '')
+
+/** "specsonline.com" -> "specsonline". */
+export function domainSlug(domain: string): string {
+  return compact(domain.replace(/\.[a-z.]+$/, ''))
+}
+
+/**
+ * How strongly a name matches a domain. Zero means no.
+ *
+ * Scored rather than boolean so the best candidate can be chosen when several
+ * names could plausibly belong to one domain — which happens constantly, since
+ * the engines write a chain's name three different ways in one answer.
+ */
+export function nameDomainScore(name: string, slug: string): number {
+  if (!slug) return 0
+  const keys = [...new Set(deriveAliases(name).map(compact))]
+
+  let best = 0
+  for (const key of keys) {
+    if (key === slug) best = Math.max(best, 100)
+    // The name, or a shortened form of it, inside the domain.
+    else if (key.length >= MIN_OVERLAP && slug.includes(key)) best = Math.max(best, 80)
+    // The domain inside the name — "twinliquors" in "twin liquors houston".
+    else if (slug.length >= MIN_OVERLAP && key.includes(slug)) best = Math.max(best, 75)
+  }
+
+  return best
+}
+
+/**
+ * How much of a name and a domain must coincide.
+ *
+ * Eight characters, because everything shorter is a place or a trade: matching
+ * on the first word alone tied a local news site, pasadenanow.com, to "Pasadena
+ * Liquor Warehouse", and "houston" inside "Houston Plumbing" to the city's own
+ * .gov. Both were plausible-looking and both were wrong, and a competitor row
+ * carrying another business's mention count is read as a measurement.
+ *
+ * The cost is real and worth paying: a business whose domain shares nothing
+ * with its name — Spec's, trading at specsonline.com — is left unmatched rather
+ * than guessed at. `--add=domain.com` names those by hand, which is the only
+ * honest way to know.
+ */
+const MIN_OVERLAP = 8
+
+
+/** The lowest score worth recording. Below it, the row is left unnamed. */
+export const NAME_MATCH_FLOOR = 40
+
+/**
+ * The best name for a domain out of the ones the engines actually wrote.
+ *
+ * Ties break towards the name mentioned most often, because that is the form
+ * an engine settled on rather than a passing variant.
+ */
+export function matchNameToDomain(
+  domain: string,
+  names: Iterable<[string, number]>,
+): { name: string; mentions: number; score: number } | null {
+  const slug = domainSlug(domain)
+  let best: { name: string; mentions: number; score: number } | null = null
+
+  for (const [name, mentions] of names) {
+    const score = nameDomainScore(name, slug)
+    if (score < NAME_MATCH_FLOOR) continue
+    if (!best || score > best.score || (score === best.score && mentions > best.mentions)) {
+      best = { name, mentions, score }
+    }
+  }
+
+  return best
 }

@@ -1,6 +1,7 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
+import type { FixState } from './form-state'
 import { eq } from 'drizzle-orm'
 import { db, schema } from '@/db'
 import { editorFor, type EditableField } from '@/editor'
@@ -15,9 +16,7 @@ import { credentialFor } from '@/lib/fix-queries'
  * that was never tried.
  */
 
-export type FixState = { error: string | null; notice: string | null }
-
-export const emptyFixState: FixState = { error: null, notice: null }
+export type { FixState } from './form-state'
 
 export async function saveCredentialAction(
   _prev: FixState,

@@ -6,9 +6,8 @@ import {
   saveCredentialAction,
   testCredentialAction,
   disconnectAction,
-  emptyFixState,
-  type FixState,
 } from '../_actions/fixes'
+import { emptyFixState, type FixState } from '../_actions/form-state'
 import { StatusTag } from '../_components/ui'
 
 /**

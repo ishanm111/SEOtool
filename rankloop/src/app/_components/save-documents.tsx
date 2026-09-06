@@ -2,16 +2,8 @@
 
 import { useActionState } from 'react'
 import { useFormStatus } from 'react-dom'
-import { saveDocumentsAction, type DocumentsState } from '../_actions/report'
-
-/**
- * Held here rather than imported from the action module.
- *
- * A "use server" file may only export async functions; a constant exported
- * beside them arrives as undefined, and the first render then reads a field off
- * nothing.
- */
-const EMPTY: DocumentsState = { saved: [], problems: [], error: null }
+import { saveDocumentsAction } from '../_actions/report'
+import { emptyDocumentsState, type DocumentsState } from '../_actions/form-state'
 
 /**
  * Puts the audit and the fix pack on the Desktop as PDFs.
@@ -30,7 +22,7 @@ export function SaveDocuments({
 }) {
   const [state, action] = useActionState<DocumentsState, FormData>(
     saveDocumentsAction,
-    EMPTY,
+    emptyDocumentsState,
   )
 
   return (

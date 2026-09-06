@@ -1,7 +1,7 @@
 import { eq, inArray } from 'drizzle-orm'
 import { openDb, schema } from '../db/raw'
 import { resolveClient, clientLocations } from '../lib/resolve-client'
-import { isNationalChain, profileCompetitor } from '../analysis/competitors'
+import { isNationalChain, matchNameToDomain, profileCompetitor } from '../analysis/competitors'
 import { countStats, countSuperlatives, wordCount } from '../ingest/score'
 import { NOT_A_DIRECT_COMPETITOR } from '../config'
 import { arg } from '../lib/args'
@@ -117,19 +117,19 @@ async function main() {
     process.stdout.write(`  ${domain.padEnd(34)} `)
     const p = await profileCompetitor(domain, locationNames)
 
-    // Match a domain against a name AI used in prose, so mention counts line up.
-    const slug = domain.replace(/\.[a-z.]+$/, '').replace(/[^a-z0-9]/gi, '').toLowerCase()
+    /**
+     * The name the engines wrote for this domain, so citations and mentions
+     * describe one business rather than two half-counted ones. A name typed in
+     * by hand with --add always wins: somebody looked.
+     */
     let matchedName = manualNames.get(domain) ?? ''
     let mentionCount = matchedName ? (nameCounts.get(matchedName) ?? 0) : 0
 
     if (!matchedName) {
-      for (const [name, n] of nameCounts) {
-        const key = name.toLowerCase().replace(/[^a-z0-9]/gi, '')
-        if (key.length >= 8 && (slug.includes(key.slice(0, 10)) || key.includes(slug.slice(0, 10)))) {
-          matchedName = name
-          mentionCount = n
-          break
-        }
+      const hit = matchNameToDomain(domain, nameCounts)
+      if (hit) {
+        matchedName = hit.name
+        mentionCount = hit.mentions
       }
     }
 
