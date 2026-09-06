@@ -5,6 +5,7 @@ import { db } from '@/db'
 import { clientLocations } from '@/lib/resolve-client'
 import { buildReportDocuments } from '@/report/build'
 import { getClient } from '@/lib/queries'
+import type { DocumentsState } from './form-state'
 
 /**
  * Regenerating the two client documents from the console.
@@ -19,11 +20,7 @@ import { getClient } from '@/lib/queries'
  * the PDFs.
  */
 
-export type DocumentsState = {
-  saved: string[]
-  problems: string[]
-  error: string | null
-}
+export type { DocumentsState } from './form-state'
 
 export async function saveDocumentsAction(
   _prev: DocumentsState,

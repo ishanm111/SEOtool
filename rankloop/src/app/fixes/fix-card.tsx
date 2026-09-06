@@ -2,7 +2,8 @@
 
 import { useActionState } from 'react'
 import { useFormStatus } from 'react-dom'
-import { applyFixAction, revertFixAction, emptyFixState, type FixState } from '../_actions/fixes'
+import { applyFixAction, revertFixAction } from '../_actions/fixes'
+import { emptyFixState, type FixState } from '../_actions/form-state'
 import { Pill, timeAgo } from '../_components/ui'
 import type { FixRow } from '@/lib/fix-queries'
 
