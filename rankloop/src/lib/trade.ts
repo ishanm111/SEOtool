@@ -14,7 +14,7 @@ import type { Client } from './client'
  * described identically in the questions we ask and the pages we propose.
  */
 
-const ACTIONS = [
+export const ACTIONS = [
   'repair', 'repairs', 'installation', 'service', 'servicing', 'cleaning',
   'replacement', 'removal', 'maintenance', 'fitting', 'plumbing', 'roofing',
 ]
@@ -24,7 +24,7 @@ const ACTIONS = [
  * store, a bakery and a garden centre all name themselves this way, and the
  * word before it is the category — which is what a customer types.
  */
-const PLACE_NOUNS = ['store', 'shop', 'market', 'boutique', 'centre', 'center', 'bakery', 'pharmacy', 'salon']
+export const PLACE_NOUNS = ['store', 'shop', 'market', 'boutique', 'centre', 'center', 'bakery', 'pharmacy', 'salon']
 
 export function splitOffering(offering: string): { thing: string; action: string | null } {
   const words = offering.trim().toLowerCase().split(/\s+/)

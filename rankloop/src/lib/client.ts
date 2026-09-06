@@ -1,4 +1,5 @@
 import { isPlaceBased, sellsProducts, type BusinessType, type Platform } from '../config'
+import { ACTIONS, PLACE_NOUNS } from './trade'
 
 /**
  * A client, with its JSON columns already parsed.
@@ -122,12 +123,68 @@ export function deriveAliases(name: string): string[] {
   out.add(noPunct.replace(/[\s-]+/g, ''))
   out.add(noPunct.replace(/\s+/g, '-'))
 
-  // Drop trailing descriptors so "Acme Appliance Repair" also matches "Acme".
   const trimmed = noPunct
     .replace(/\b(llc|inc\.?|co\.?|corp\.?|ltd\.?)\b/g, '')
     .replace(/\s+/g, ' ')
     .trim()
   if (trimmed.length >= 4) out.add(trimmed)
 
+  /**
+   * The shorter names an engine actually writes.
+   *
+   * Nobody types a business's full registered name into an answer, and the
+   * engines do not either: Perplexity wrote "El Barrilito Liquor" for a shop
+   * recorded as "El Barrilito Liquor Store", and the mention was scored as
+   * absent — which is the worst failure this tool has, because it under-reports
+   * the one number the client is paying to move.
+   *
+   * Two steps, both only from the end of the name:
+   *
+   *  1. Drop the trade noun a business names itself with — "store", "repair",
+   *     "services". That yields "el barrilito liquor".
+   *  2. Then drop the category word in front of it, which is only ever removed
+   *     once a trade noun has already gone. That yields "el barrilito".
+   *
+   * Never below two words. "Houston Plumbing Services" stops at "houston
+   * plumbing" rather than reaching "houston" — a single generic word matches
+   * every rival in the city, and a false mention is worse than a missed one:
+   * it tells a client they are being recommended when they are not.
+   */
+  for (const shortened of shorterForms(trimmed || noPunct)) out.add(shortened)
+
   return [...out].filter((a) => a.length >= 4)
 }
+
+/** Trade nouns and company words a name can safely lose from its end. */
+const DROPPABLE_TAIL = new Set([
+  ...ACTIONS,
+  ...PLACE_NOUNS,
+  'services',
+  'solutions',
+  'company',
+  'group',
+  'supply',
+  'supplies',
+  'contractors',
+  'contracting',
+])
+
+/** The two shortened forms, or fewer when trimming would go too far. */
+function shorterForms(name: string): string[] {
+  const words = name.split(/\s+/).filter(Boolean)
+  const out: string[] = []
+
+  // 1. the trade noun
+  if (words.length >= 3 && DROPPABLE_TAIL.has(words[words.length - 1])) {
+    const withoutTrade = words.slice(0, -1)
+    out.push(withoutTrade.join(' '))
+
+    // 2. the category word in front of it, once the trade noun has gone
+    if (withoutTrade.length >= 3) {
+      out.push(withoutTrade.slice(0, -1).join(' '))
+    }
+  }
+
+  return out.filter((a) => a.length >= 4)
+}
+
