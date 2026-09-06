@@ -155,10 +155,41 @@ export function deriveAliases(name: string): string[] {
   return [...out].filter((a) => a.length >= 4)
 }
 
-/** Trade nouns and company words a name can safely lose from its end. */
+/**
+ * Trade nouns and company words a name can safely lose from its end.
+ *
+ * Reference data about how businesses name themselves, not about any client —
+ * the same list is right for every business the tool will ever see, which is
+ * why it lives in code beside the state list rather than in a table.
+ *
+ * A word earns its place here by being a descriptor rather than a brand: no
+ * customer thinks of "Clinic" as the name of the clinic. Anything doubtful is
+ * left out and handled by the length rule below instead.
+ */
 const DROPPABLE_TAIL = new Set([
   ...ACTIONS,
   ...PLACE_NOUNS,
+  // what the business is
+  'clinic',
+  'studio',
+  'workshop',
+  'works',
+  'garage',
+  'nursery',
+  'pharmacy',
+  'laundry',
+  'cleaners',
+  'brewery',
+  'roasters',
+  'hardware',
+  'florist',
+  'jewellers',
+  'jewelers',
+  'opticians',
+  'barbers',
+  'barbershop',
+  'tailors',
+  // what it calls itself
   'services',
   'solutions',
   'company',
@@ -167,24 +198,43 @@ const DROPPABLE_TAIL = new Set([
   'supplies',
   'contractors',
   'contracting',
+  'builders',
+  'associates',
+  'partners',
+  'specialists',
+  'experts',
 ])
 
-/** The two shortened forms, or fewer when trimming would go too far. */
+/**
+ * The shortened forms, or none when trimming would go too far.
+ *
+ * Two rules, and both stop at two words:
+ *
+ *  - A known trade noun comes off a name of three words or more, and the
+ *    category word in front of it follows only on a longer name, so
+ *    "el barrilito liquor store" reaches "el barrilito" but
+ *    "houston plumbing services" stops at "houston plumbing".
+ *  - A name of four words or more may lose its last word whether or not the
+ *    vocabulary knows it. "Bayou City Coffee Roasters" and "Lone Star Tequila
+ *    Depot" are the common case, and a list of trade nouns will never be
+ *    complete — but three words left over are still distinctive enough that a
+ *    wrong guess does not match a rival.
+ */
 function shorterForms(name: string): string[] {
   const words = name.split(/\s+/).filter(Boolean)
-  const out: string[] = []
+  if (words.length < 3) return []
 
-  // 1. the trade noun
-  if (words.length >= 3 && DROPPABLE_TAIL.has(words[words.length - 1])) {
-    const withoutTrade = words.slice(0, -1)
-    out.push(withoutTrade.join(' '))
+  const known = DROPPABLE_TAIL.has(words[words.length - 1])
+  if (!known && words.length < 4) return []
 
-    // 2. the category word in front of it, once the trade noun has gone
-    if (withoutTrade.length >= 3) {
-      out.push(withoutTrade.slice(0, -1).join(' '))
-    }
-  }
+  const withoutTail = words.slice(0, -1)
+  const out = [withoutTail.join(' ')]
+
+  // The category word in front of a trade noun — "liquor" before "store" —
+  // only ever after a word we recognised, and never below two words.
+  if (known && withoutTail.length >= 3) out.push(withoutTail.slice(0, -1).join(' '))
 
   return out.filter((a) => a.length >= 4)
 }
+
 

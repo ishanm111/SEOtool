@@ -1,7 +1,8 @@
 import Link from 'next/link'
-import type { ClientCard as CardData } from '@/lib/run-queries'
+import type { ClientCard as CardData, RunRow } from '@/lib/run-queries'
+import { STEP_BY_KEY, type StepKey } from '@/lib/pipeline'
 import { BUSINESS_TYPE_LABELS } from '@/config'
-import { Pill, StatusTag, timeAgo } from './ui'
+import { Pill, ProgressBar, StatusTag, timeAgo } from './ui'
 import { DeleteClient } from './delete-client'
 import { RunControls } from './run-controls'
 import { StartRun } from './start-run'
@@ -93,24 +94,22 @@ export function ClientCard({ card: c }: { card: CardData }) {
         />
       </dl>
 
-      <div className="mt-5 flex flex-wrap items-center justify-between gap-3 border-t border-line pt-4">
-        <div className="text-xs text-ink-3">
-          {c.activeRun ? (
-            <Link href={`/runs/${c.activeRun.id}`} className="inline-flex items-center gap-2">
-              <StatusTag status={c.activeRun.status} />
-              <span>
-                step {c.activeRun.stepsDone + 1} of {c.activeRun.stepsTotal}
-              </span>
-            </Link>
-          ) : c.lastRun ? (
-            <Link href={`/runs/${c.lastRun.id}`} className="inline-flex items-center gap-2">
-              <StatusTag status={c.lastRun.status} />
-              <span>last run {timeAgo(c.lastRun.finishedAt ?? c.lastRun.createdAt)}</span>
-            </Link>
-          ) : (
-            <span>never run</span>
-          )}
-        </div>
+      {c.activeRun ? (
+        <RunProgress run={c.activeRun} />
+      ) : c.lastRun ? (
+        <Link
+          href={`/runs/${c.lastRun.id}`}
+          className="mt-4 flex items-center gap-2 rounded-lg border border-line px-3 py-2 text-xs text-ink-3 transition hover:border-line-2 hover:bg-sink"
+        >
+          <StatusTag status={c.lastRun.status} />
+          <span>last run {timeAgo(c.lastRun.finishedAt ?? c.lastRun.createdAt)}</span>
+          <span className="ml-auto font-medium text-pine">Open the run →</span>
+        </Link>
+      ) : (
+        <p className="mt-4 text-xs text-ink-3">never run</p>
+      )}
+
+      <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-line pt-4">
 
         <div className="flex flex-wrap items-center gap-2">
           {c.activeRun && <RunControls runId={c.activeRun.id} status={c.activeRun.status} />}
@@ -143,6 +142,44 @@ export function ClientCard({ card: c }: { card: CardData }) {
         />
       </div>
     </article>
+  )
+}
+
+/**
+ * The live run, as something you can obviously press.
+ *
+ * It was a line of 12px grey text that happened to be a link, sitting next to a
+ * much louder button that switches client — so the one thing an operator wants
+ * while a run is going, the step it is on and its output, was the hardest thing
+ * on the card to find. It now says which step, how far through, and where the
+ * press goes.
+ */
+function RunProgress({ run }: { run: RunRow }) {
+  const step = run.currentStep ? STEP_BY_KEY.get(run.currentStep as StepKey) : null
+  return (
+    <Link
+      href={`/runs/${run.id}`}
+      className="mt-4 block rounded-xl border border-line px-3 py-2.5 transition hover:border-pine/40 hover:bg-pine-soft/40"
+    >
+      <div className="flex flex-wrap items-center gap-2">
+        <StatusTag status={run.status} />
+        <span className="text-sm font-medium">
+          {step?.label ?? `step ${Math.min(run.stepsDone + 1, run.stepsTotal)}`}
+        </span>
+        <span className="text-xs text-ink-3">
+          step {Math.min(run.stepsDone + 1, run.stepsTotal)} of {run.stepsTotal}
+        </span>
+        <span className="ml-auto text-xs font-medium text-pine">Watch it →</span>
+      </div>
+      <div className="mt-2">
+        <ProgressBar done={run.stepsDone} total={run.stepsTotal} status={run.status} />
+      </div>
+      {step?.duration && (
+        <p className="mt-1.5 text-xs text-ink-3">
+          {step.description} · {step.duration}
+        </p>
+      )}
+    </Link>
   )
 }
 

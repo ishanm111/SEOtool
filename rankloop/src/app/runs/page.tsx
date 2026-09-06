@@ -1,7 +1,7 @@
 import Link from 'next/link'
 import { listRuns } from '@/lib/run-queries'
 import { STEP_BY_KEY } from '@/lib/pipeline'
-import { PageHeader, StatusTag, Empty, timeAgo, duration } from '../_components/ui'
+import { PageHeader, ProgressBar, StatusTag, Empty, timeAgo, duration } from '../_components/ui'
 import { AutoRefresh } from '../_components/auto-refresh'
 
 export const dynamic = 'force-dynamic'
@@ -68,7 +68,9 @@ export default function RunsPage() {
                     <div className="text-xs text-ink-3">{r.clientDomain}</div>
                   </td>
                   <td className="px-5 py-3">
-                    <ProgressBar done={r.stepsDone} total={r.stepsTotal} status={r.status} />
+                    <div className="w-28">
+                      <ProgressBar done={r.stepsDone} total={r.stepsTotal} status={r.status} />
+                    </div>
                     <div className="mt-1 text-xs text-ink-3">
                       {r.currentStep
                         ? STEP_BY_KEY.get(r.currentStep as never)?.label ?? r.currentStep
@@ -93,13 +95,4 @@ export default function RunsPage() {
   )
 }
 
-function ProgressBar({ done, total, status }: { done: number; total: number; status: string }) {
-  const pct = total === 0 ? 0 : Math.round((done / total) * 100)
-  const colour =
-    status === 'failed' ? 'bg-rose' : status === 'done' ? 'bg-moss' : 'bg-pine'
-  return (
-    <div className="h-1.5 w-28 overflow-hidden rounded-full bg-sink">
-      <div className={`h-full rounded-full ${colour} transition-all`} style={{ width: `${pct}%` }} />
-    </div>
-  )
-}
+

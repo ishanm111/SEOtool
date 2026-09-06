@@ -212,3 +212,36 @@ export function NeedsRun({
     </Empty>
   )
 }
+
+
+/**
+ * How far through a run is.
+ *
+ * Shared by the runs table and the client card: the same run showing two
+ * different amounts of progress on two screens is the kind of thing that makes
+ * an operator stop believing either of them.
+ */
+export function ProgressBar({
+  done,
+  total,
+  status,
+}: {
+  done: number
+  total: number
+  status: string
+}) {
+  const pct = total === 0 ? 0 : Math.round((done / total) * 100)
+  const colour =
+    status === 'failed'
+      ? 'bg-rose'
+      : status === 'done'
+        ? 'bg-moss'
+        : status === 'paused'
+          ? 'bg-amber'
+          : 'bg-pine'
+  return (
+    <div className="h-1.5 w-full overflow-hidden rounded-full bg-sink">
+      <div className={`h-full rounded-full ${colour} transition-all`} style={{ width: `${pct}%` }} />
+    </div>
+  )
+}
