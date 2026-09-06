@@ -18,6 +18,7 @@
     "analyze": "tsx src/scripts/analyze.ts",
     "recommend": "tsx src/scripts/recommend.ts",
     "report": "tsx src/scripts/report.ts",
+    "backfill-aliases": "tsx src/scripts/backfill-aliases.ts",
     "gsc-auth": "tsx src/scripts/search-console-auth.ts",
     "gsc": "tsx src/scripts/fetch-search-console.ts"
   },

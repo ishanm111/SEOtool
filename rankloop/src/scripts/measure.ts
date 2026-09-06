@@ -9,6 +9,7 @@ import { groupByMarket, marketKeyOf } from '../lib/markets'
 import { loadEnv } from '../lib/env'
 import { arg, flag } from '../lib/args'
 import { waitIfPaused } from '../lib/pause-gate'
+import { mentionsClient } from '../analysis/parse'
 
 loadEnv()
 
@@ -213,7 +214,16 @@ async function main() {
         if (result.ok) {
           consecutiveFailures.set(engine.name, 0)
           stats.ok++
-          const named = client.aliases.some((a) => result.answerText.toLowerCase().includes(a))
+          /**
+           * The same test the analysis uses, not a second one written here.
+           *
+           * This line used to check the alias list by hand and miss what
+           * `mentionsClient` catches — a phone number, and the shortened forms
+           * of the name. An operator watching the log then saw "not named" for
+           * an answer the report would later count, which is a worse kind of
+           * wrong than either verdict on its own.
+           */
+          const named = mentionsClient(result.answerText, client)
           if (named) stats.mentioned++
           console.log(`ok (${result.answerText.length} chars, ${result.citations.length} links)${named ? '  <-- CLIENT NAMED' : ''}`)
         } else {
