@@ -42,15 +42,37 @@ function locationPage(
   facts: ClientFacts,
 ): { slug: string; html: string; faqs: { q: string; a: string }[] } {
   const where = `${location.name}${location.region ? `, ${location.region}` : ''}`
-  const visit = isVisitTrade(trade)
+  /**
+   * Whether customers come to the business or it goes to them.
+   *
+   * Taken from the kind the operator recorded first, and only guessed from the
+   * trade word when there is nothing recorded — a shop that was added before
+   * the question was asked still reads as one. Everything below turns on it:
+   * a page telling a liquor store's customers that "we give you a price before
+   * any work starts" is describing a business that does not exist.
+   */
+  const visit = client.businessType === 'local_retail' || isVisitTrade(trade)
   const phone = client.primaryPhone ?? FILL('phone number')
   const slug = `${trade.replace(/\s+/g, '-')}-${location.name.toLowerCase().replace(/\s+/g, '-')}`
 
   const faqs = [
-    {
-      q: `Do you cover ${location.name}?`,
-      a: `Yes. We work throughout ${where} and the surrounding area. If you are not sure whether you are in range, call ${phone} and ask.`,
-    },
+    visit
+      ? {
+          q: `Where are you, and is it easy to get to from ${location.name}?`,
+          a:
+            [
+              facts.street_address
+                ? `We are at ${facts.street_address}, a short drive from ${where}.`
+                : FILL(`the address, and roughly how far it is from ${location.name}`),
+              facts.access_notes,
+            ]
+              .filter(Boolean)
+              .join(' ') + ` Call ${phone} if you want something held back for you.`,
+        }
+      : {
+          q: `Do you cover ${location.name}?`,
+          a: `Yes. We work throughout ${where} and the surrounding area. If you are not sure whether you are in range, call ${phone} and ask.`,
+        },
     visit
       ? {
           q: `What are your opening hours?`,
@@ -76,19 +98,31 @@ function locationPage(
        * same failure as inventing a number.
        */
       q: `How much does it cost?`,
-      a: `${
-        facts.price_detail ??
-        FILL(
-          'how you charge — e.g. a call-out fee plus parts and labour, a fixed price per job, or an hourly rate',
-        )
-      } We give you a price before any work starts.`,
+      a: visit
+        ? (facts.price_detail ??
+          FILL('what a customer typically spends, as a range, and what moves it up or down'))
+        : `${
+            facts.price_detail ??
+            FILL(
+              'how you charge — e.g. a call-out fee plus parts and labour, a fixed price per job, or an hourly rate',
+            )
+          } We give you a price before any work starts.`,
     },
-    {
-      q: `Do you guarantee your work?`,
-      a:
-        facts.warranty ??
-        FILL('warranty terms — do not publish until the business has confirmed these in writing'),
-    },
+    visit
+      ? {
+          q: `What if something is wrong with what I bought?`,
+          a:
+            [facts.returns, facts.warranty].filter(Boolean).join(' ') ||
+            FILL(
+              'the returns and guarantee terms — do not publish until the business has confirmed these in writing',
+            ),
+        }
+      : {
+          q: `Do you guarantee your work?`,
+          a:
+            facts.warranty ??
+            FILL('warranty terms — do not publish until the business has confirmed these in writing'),
+        },
   ]
 
   const intro = visit
@@ -103,13 +137,24 @@ function locationPage(
       )}</p>
 <p>Tell us what you need when you get in touch, and we will give you a time window and a price before any work starts.</p>`.trim()
 
+  const wider =
+    location.metro && location.metro !== location.name
+      ? `, including the wider ${location.metro} area`
+      : ''
+
+  // A shop does not "cover" an area — people travel to it, and a page saying
+  // otherwise describes a service business that happens to sell bottles.
   const local = `
-<h2>Working across ${where}</h2>
-<p>We cover ${location.name} and the surrounding area${
-    location.metro && location.metro !== location.name ? `, including the wider ${location.metro} area` : ''
-  }.</p>
+<h2>${visit ? `Customers from ${where}` : `Working across ${where}`}</h2>
+<p>${
+    visit
+      ? `Customers come to us from ${location.name} and the surrounding area${wider}.`
+      : `We cover ${location.name} and the surrounding area${wider}.`
+  }</p>
 <p>${FILL(
-    `one or two sentences about ${location.name} specifically — the neighbourhoods you cover, or something true about the local housing stock. Generic text here is what makes a location page look automated.`,
+    visit
+      ? `one or two sentences about ${location.name} specifically — which neighbourhoods your customers come from, or what sells well to them. Generic text here is what makes a location page look automated.`
+      : `one or two sentences about ${location.name} specifically — the neighbourhoods you cover, or something true about the local housing stock. Generic text here is what makes a location page look automated.`,
   )}</p>`.trim()
 
   const faqHtml = `<h2>Common questions</h2>\n${faqs

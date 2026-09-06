@@ -47,6 +47,17 @@ export type Question = {
    * operator forgets, the "and what changes it" a bare price leaves out.
    */
   frames?: string[]
+  /**
+   * The same question, worded for a different kind of business.
+   *
+   * A question can be right for all three and still read as though it were
+   * written for one of them. "What does a typical job cost, and what changes
+   * the price?" is exactly the right question to put to a shop, but the example
+   * under it talked about call-outs and parts, and an operator reading that
+   * concludes the question is not for them and skips it. Only the wording
+   * changes here; which kinds are asked at all is `appliesTo`.
+   */
+  variants?: Partial<Record<BusinessType, QuestionVariant>>
   /** What answering it unblocks. Empty when it only informs the operator. */
   resolves: string
   /**
@@ -55,6 +66,9 @@ export type Question = {
    */
   mustBeConfirmed?: boolean
 }
+
+/** The parts of a question that may be reworded per kind of business. */
+export type QuestionVariant = Partial<Pick<Question, 'label' | 'help' | 'placeholder' | 'frames'>>
 
 export type QuestionGroup = {
   title: string
@@ -171,6 +185,28 @@ export const QUESTIONNAIRE: QuestionGroup[] = [
           'A call-out is $…, taken off the price of the work if you go ahead',
           'Priced per …, from $…',
         ],
+        variants: {
+          local_retail: {
+            label: 'What does a typical customer spend, and what changes it?',
+            help: 'A range by category, never a price list — prices move and this gets published. "Is it expensive?" is one of the questions customers put to an AI before deciding where to drive.',
+            placeholder: 'Most of what we sell is $15–$80; the top end is the imported stock, and a case of six is 10% off',
+            frames: [
+              'Most of what we stock is between $… and $…; the pricier end is …',
+              'A case of … is …% off',
+              'Everything on the shelf is between $… and $…',
+            ],
+          },
+          ecommerce: {
+            label: 'What does a typical order cost, and what changes the price?',
+            help: 'A range is fine, and honest ranges outperform "prices vary" — it is one of the questions customers ask an AI directly.',
+            placeholder: 'Most orders land between $40 and $120; the difference is usually the size',
+            frames: [
+              'Most orders land between $… and $…; the difference is usually …',
+              'Priced per …, from $…',
+              'Free delivery over $…',
+            ],
+          },
+        },
         resolves: 'the pricing answer on new pages and buying guides',
         mustBeConfirmed: true,
       },
@@ -202,6 +238,28 @@ export const QUESTIONNAIRE: QuestionGroup[] = [
           '… year guarantee on the work',
           'No warranty is offered',
         ],
+        variants: {
+          local_retail: {
+            label: 'Guarantee on what you sell',
+            help: 'What happens when something is faulty. In the exact words the business would stand behind — left blank, every page that would mention one stays blocked.',
+            placeholder: 'Manufacturer warranty on everything; anything faulty exchanged within 30 days with the receipt',
+            frames: [
+              'Manufacturer warranty on everything we sell',
+              'Anything faulty exchanged within … days with the receipt',
+              'No guarantee beyond the manufacturer&rsquo;s',
+            ],
+          },
+          ecommerce: {
+            label: 'Guarantee on what you sell',
+            help: 'What happens when something arrives faulty or fails later. In the exact words the business would stand behind.',
+            placeholder: 'Manufacturer warranty on everything; faulty on arrival is replaced and we pay the postage',
+            frames: [
+              'Manufacturer warranty on everything we sell',
+              'Faulty on arrival is replaced, and we pay the return postage',
+              '… year guarantee, claimed through us rather than the maker',
+            ],
+          },
+        },
         resolves: 'the warranty answer on new pages',
         mustBeConfirmed: true,
       },
@@ -277,6 +335,26 @@ export const QUESTIONNAIRE: QuestionGroup[] = [
           '… certified, public liability cover to $…',
           'Insured; no licence is required for this work in …',
         ],
+        variants: {
+          local_retail: {
+            help: 'Anything with a number or an issuing body — a trading licence, an age-restricted-sales permit, food handling, insurance. Vague trust language is worth nothing; a licence number is worth a lot.',
+            placeholder: 'State licence #12345, food handling certified, fully insured',
+            frames: [
+              'Licence #…, issued by …; fully insured',
+              '… certified, public liability cover to $…',
+              'Insured; no licence is required for what we sell in …',
+            ],
+          },
+          ecommerce: {
+            help: 'Anything with a number or an issuing body — company registration, an industry body, a certification the products carry.',
+            placeholder: 'Registered company #12345678; member of …',
+            frames: [
+              'Registered company #…',
+              'Member of …, since …',
+              'Everything we sell is … certified',
+            ],
+          },
+        },
         resolves: 'credibility claims that would otherwise be blocked',
         mustBeConfirmed: true,
       },
@@ -292,6 +370,24 @@ export const QUESTIONNAIRE: QuestionGroup[] = [
           '…% fixed on the first visit',
           'Average response time of … minutes, measured across … calls',
         ],
+        variants: {
+          local_retail: {
+            placeholder: 'Family-run since 2009; over 600 lines in stock',
+            frames: [
+              'Family-run since …',
+              '… lines in stock, more than any shop within … miles',
+              'Serving … since …',
+            ],
+          },
+          ecommerce: {
+            placeholder: '12,000 orders shipped since 2018; 98% dispatched the next working day',
+            frames: [
+              '… orders shipped since …',
+              '…% dispatched the next working day',
+              'Average rating of … across … reviews',
+            ],
+          },
+        },
         resolves: 'statistics in rewritten body copy',
         mustBeConfirmed: true,
       },
@@ -344,9 +440,11 @@ export const QUESTIONNAIRE: QuestionGroup[] = [
 export function questionsFor(businessType: BusinessType): QuestionGroup[] {
   return QUESTIONNAIRE.map((group) => ({
     ...group,
-    questions: group.questions.filter(
-      (q) => q.appliesTo === 'all' || q.appliesTo.includes(businessType),
-    ),
+    questions: group.questions
+      .filter((q) => q.appliesTo === 'all' || q.appliesTo.includes(businessType))
+      // Reworded for this kind where a variant exists, and left alone where the
+      // one wording genuinely suits all three.
+      .map((q) => ({ ...q, ...(q.variants?.[businessType] ?? {}) })),
   })).filter((group) => group.questions.length > 0)
 }
 
