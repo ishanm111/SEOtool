@@ -11,6 +11,8 @@ import { createClient, draftFrom, mergedAliases, type ClientDraft } from '@/onbo
 import { BUSINESS_TYPES, isPlaceBased, type BusinessType } from '@/config'
 import { expandZipEntries, type ZipPlace } from '@/onboard/zip'
 import { ACTIVE_CLIENT_COOKIE } from '@/lib/active-client'
+import { deleteClient, planDeletion } from '@/lib/delete-client'
+import { activeRunForClient } from '@/lib/runner'
 import { saveFacts } from '@/lib/facts'
 import { readAnswers } from '@/lib/read-answers'
 
@@ -253,4 +255,67 @@ export async function expandTowns(raw: string): Promise<TownExpansion> {
     .filter(Boolean)
   const { entries: expanded, resolved, unresolved } = await expandZipEntries(entries)
   return { towns: expanded.join(', '), resolved, unresolved }
+}
+
+
+/**
+ * Removing a client for good.
+ *
+ * Guarded three ways, because there is no undo and the thing being destroyed is
+ * months of measurement rather than a row:
+ *
+ *  - A run in flight is refused. Its child process is still writing to the
+ *    tables this would delete underneath it.
+ *  - The business name has to be typed. A confirm dialog is dismissed by
+ *    reflex; typing "El Barrilito Liquor Store" is not something anybody does
+ *    by accident, and it also rules out deleting the wrong card.
+ *  - What will go is counted and shown before the button is offered, including
+ *    the one consequence that reaches outside this database: a published fix
+ *    can no longer be reverted once the record of what it replaced is gone.
+ */
+export type DeleteClientState = { error: string | null }
+
+export async function deleteClientAction(
+  _prev: DeleteClientState,
+  formData: FormData,
+): Promise<DeleteClientState> {
+  const clientId = Number(formData.get('clientId'))
+  if (!Number.isInteger(clientId) || clientId <= 0) {
+    return { error: 'No client was given.' }
+  }
+
+  const plan = planDeletion(db, clientId)
+  if (!plan) return { error: 'That client no longer exists.' }
+
+  if (activeRunForClient(clientId) !== null) {
+    return {
+      error: `${plan.name} has a run in progress. Stop it first — deleting the client underneath a run leaves the step it is on writing to rows that no longer exist.`,
+    }
+  }
+
+  const typed = String(formData.get('confirmName') ?? '').trim()
+  if (typed.toLowerCase() !== plan.name.trim().toLowerCase()) {
+    return {
+      error: `Type the business name exactly to confirm: ${plan.name}`,
+    }
+  }
+
+  try {
+    deleteClient(db, clientId)
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : String(err) }
+  }
+
+  /**
+   * The cookie is cleared only when it pointed at the client just deleted.
+   * Left behind, every page would try to open a business that is not there and
+   * show "no client selected" without saying why.
+   */
+  const store = await cookies()
+  if (store.get(ACTIVE_CLIENT_COOKIE)?.value === String(clientId)) {
+    store.delete(ACTIVE_CLIENT_COOKIE)
+  }
+
+  revalidatePath('/', 'layout')
+  redirect(`/clients?deleted=${encodeURIComponent(plan.name)}`)
 }

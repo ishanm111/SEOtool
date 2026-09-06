@@ -128,6 +128,8 @@ export type ClientCard = {
   recommendationCount: number
   appliedFixes: number
   competitorCount: number
+  /** Runs ever started for this client — shown before deleting them. */
+  runCount: number
   hasCredentials: boolean
   lastRun: RunRow | null
   activeRun: RunRow | null
@@ -190,6 +192,7 @@ export function listClientCards(): ClientCard[] {
       recommendationCount: recs.filter((r) => r.clientId === client.id).length,
       appliedFixes: applied.filter((f) => f.clientId === client.id).length,
       competitorCount: competitors.filter((c) => c.clientId === client.id).length,
+      runCount: clientRuns.length,
       hasCredentials: creds.some((c) => c.clientId === client.id && c.status !== 'failed'),
       lastRun: clientRuns[0] ?? null,
       activeRun: clientRuns.find((r) => isLive(r.status)) ?? null,

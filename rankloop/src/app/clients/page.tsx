@@ -18,10 +18,10 @@ export const dynamic = 'force-dynamic'
 export default async function ClientsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ added?: string }>
+  searchParams: Promise<{ added?: string; deleted?: string }>
 }) {
   const cards = listClientCards()
-  const { added } = await searchParams
+  const { added, deleted } = await searchParams
   const anyLive = cards.some((c) => c.activeRun)
 
   return (
@@ -36,6 +36,12 @@ export default async function ClientsPage({
           </Link>
         }
       />
+
+      {deleted && (
+        <div className="mb-6 rounded-xl border border-line bg-sink p-4 text-sm text-ink-2">
+          {deleted} was deleted, along with everything measured for them.
+        </div>
+      )}
 
       {added && (
         <div className="mb-6 rounded-xl border border-moss/25 bg-moss-soft p-4 text-sm text-moss-deep">
