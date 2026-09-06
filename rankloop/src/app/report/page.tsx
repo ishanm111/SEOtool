@@ -1,8 +1,10 @@
 import fs from 'node:fs'
 import { activeClient } from '@/lib/active-client'
-import { reportFileFor } from '@/lib/report-file'
+import { fixPackFileFor, pdfNameFor, pdfOutputDir, reportFileFor } from '@/lib/report-file'
 import { NoClient } from '../_components/no-client'
 import { NeedsRun } from '../_components/ui'
+import { SaveDocuments } from '../_components/save-documents'
+import path from 'node:path'
 
 export const dynamic = 'force-dynamic'
 
@@ -21,6 +23,10 @@ export default async function ReportPage() {
   const exists = fs.existsSync(file)
   const generatedOn = exists ? fs.statSync(file).mtime.toLocaleString() : null
 
+  const fixPackExists = fs.existsSync(fixPackFileFor(client.domain))
+  const auditPdf = path.join(pdfOutputDir(), pdfNameFor(client.domain, 'audit'))
+  const pdfSavedOn = fs.existsSync(auditPdf) ? fs.statSync(auditPdf).mtime.toLocaleString() : null
+
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-end justify-between gap-4">
@@ -31,16 +37,36 @@ export default async function ReportPage() {
               ? `The audit as ${client.name} would receive it. Generated ${generatedOn}.`
               : `No report has been generated for ${client.name} yet.`}
           </p>
+          {exists && (
+            <p className="mt-1 text-xs text-ink-3">
+              {pdfSavedOn
+                ? `PDFs on your Desktop, saved ${pdfSavedOn}. Pressing save writes them again from the current data.`
+                : 'Save it as a PDF to your Desktop, together with the fix pack — every proposed change in full, for a site this console cannot publish to.'}
+            </p>
+          )}
         </div>
         {exists && (
-          <a
-            href={`/api/report?domain=${encodeURIComponent(client.domain)}`}
-            target="_blank"
-            rel="noreferrer"
-            className="btn btn-secondary"
-          >
-            Open full page
-          </a>
+          <div className="flex flex-wrap items-start gap-2">
+            <a
+              href={`/api/report?domain=${encodeURIComponent(client.domain)}`}
+              target="_blank"
+              rel="noreferrer"
+              className="btn btn-secondary"
+            >
+              Open full page
+            </a>
+            {fixPackExists && (
+              <a
+                href={`/api/report?domain=${encodeURIComponent(client.domain)}&doc=fix-pack`}
+                target="_blank"
+                rel="noreferrer"
+                className="btn btn-secondary"
+              >
+                Open the fix pack
+              </a>
+            )}
+            <SaveDocuments clientId={client.id} />
+          </div>
         )}
       </div>
 

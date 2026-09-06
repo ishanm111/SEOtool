@@ -7,6 +7,35 @@
  * conditional, never as a promise.
  */
 
+export type ReportFinding = {
+  severity: 'critical' | 'high' | 'medium' | 'low'
+  category: string
+  issue: string
+  /** What is there now, when the finding is about a specific piece of text. */
+  currentText: string | null
+  proposedText: string | null
+  evidence: string | null
+  /** The page it is about, when it is about one page rather than the site. */
+  where: string | null
+}
+
+export type ReportFix = {
+  /** meta_title | meta_description | copy | schema | new_page */
+  kind: string
+  /** The page or the slug this change belongs to. */
+  target: string
+  url: string | null
+  currentValue: string | null
+  proposedValue: string
+  reason: string
+  /**
+   * Values only the business can confirm, still unanswered. A fix carrying one
+   * cannot be published as it stands, and the report says so rather than
+   * presenting it as ready.
+   */
+  placeholderCount: number
+}
+
 export type ReportData = {
   clientName: string
   clientDomain: string
@@ -28,8 +57,19 @@ export type ReportData = {
   gap: { label: string; client: string | number; rivals: string | number; note?: string }[]
   rivalCount: number
 
-  criticalFindings: { category: string; issue: string; proposedText: string | null }[]
-  highFindings: { category: string; issue: string; proposedText: string | null }[]
+  /**
+   * Every finding, at every severity, rather than the critical ones and five
+   * others. A client reading "3 critical issues" and a fix list of 179 items
+   * cannot see how the two relate; the report is the document they keep, so it
+   * carries the whole audit.
+   */
+  findings: ReportFinding[]
+  /**
+   * The changes to make, in full. The point of the document is what to do
+   * next, and a report that describes problems without stating the fix leaves
+   * the reader exactly where they started.
+   */
+  fixes: ReportFix[]
 
   pageCount: number
   paragraphCount: number
@@ -49,6 +89,61 @@ export type ReportData = {
   evidence: { engine: string; question: string; excerpt: string; image?: string }[]
   generatedPageCount: number
 }
+
+const SEVERITIES = ['critical', 'high', 'medium', 'low'] as const
+type Severity = (typeof SEVERITIES)[number]
+
+const SEVERITY_LABEL: Record<Severity, string> = {
+  critical: 'Critical',
+  high: 'High',
+  medium: 'Medium',
+  low: 'Low',
+}
+
+/** What each block of findings is called, in the words used with a client. */
+const SEVERITY_HEADING: Record<Severity, string> = {
+  critical: 'Critical',
+  high: 'Also significant',
+  medium: 'Worth doing',
+  low: 'Minor, for completeness',
+}
+
+const bySeverity = (d: ReportData, sev: Severity) => d.findings.filter((f) => f.severity === sev)
+
+/** Fixes carrying a value only the business can confirm. */
+const blockedCount = (d: ReportData) => d.fixes.filter((f) => f.placeholderCount > 0).length
+
+const FIX_KINDS = ['meta_title', 'meta_description', 'copy', 'schema', 'new_page'] as const
+
+const FIX_KIND_LABEL: Record<string, string> = {
+  meta_title: 'Page title',
+  meta_description: 'Search description',
+  copy: 'Words on the page',
+  schema: 'Business details in the page code',
+  new_page: 'A page you do not have yet',
+}
+
+const FIX_KIND_NOTE: Record<string, string> = {
+  meta_title: 'the line a search engine shows as the link',
+  meta_description: 'the sentence underneath it',
+  copy: 'rewritten paragraphs, replacing the exact text quoted',
+  schema: 'JSON-LD for the page template, invisible to visitors',
+  new_page: 'written in full, ready to publish',
+}
+
+/**
+ * How many changes are printed in full in the report itself.
+ *
+ * A hundred and seventy-nine of them is not a document anybody reads, and a
+ * client report that runs to sixty pages of markup gets skimmed and closed.
+ * The rest live in the fix pack, which exists to be worked through rather than
+ * read, and the report says plainly that it is showing a subset.
+ */
+const MAX_FIXES_IN_REPORT = 12
+
+/** Long values are cut rather than dropped, and say that they were cut. */
+const trim = (text: string, max: number) =>
+  text.length <= max ? text : `${text.slice(0, max).trimEnd()}…`
 
 const esc = (s: string) =>
   s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
@@ -213,6 +308,21 @@ export function renderReport(d: ReportData): string {
   .finding{border:1px solid var(--line);border-left:4px solid var(--bad);border-radius:8px;
     padding:16px 18px;margin:14px 0;background:#fff}
   .finding.high{border-left-color:#e07b1a}
+  .finding.medium{border-left-color:#b8a12e}
+  .finding.low{border-left-color:var(--line)}
+  .finding .where{margin-top:6px;font-size:12.5px;color:var(--muted);word-break:break-all}
+  .finding .was{margin-top:8px;padding:9px 12px;background:#f6f4ef;border-radius:6px;
+    font-size:13.5px;color:#444}
+  .fixblock{border:1px solid var(--line);border-left:4px solid var(--good);border-radius:8px;
+    padding:14px 16px;margin:12px 0}
+  .fixblock.blocked{border-left-color:#e07b1a}
+  .fixblock .cat{font-size:11px;letter-spacing:.1em;text-transform:uppercase;font-weight:800;color:var(--muted)}
+  .fixblock .where{margin-top:4px;font-size:12.5px;color:var(--muted);word-break:break-all}
+  .fixblock .was{margin-top:10px;padding:9px 12px;background:#f6f4ef;border-radius:6px;
+    font-size:13.5px;color:#444;white-space:pre-wrap}
+  .fixblock .now{margin-top:8px;padding:11px 13px;background:var(--good-bg);border-radius:6px;
+    font-size:14.5px;white-space:pre-wrap}
+  .fixblock .now b{color:var(--good)}
   .finding .cat{font-size:11px;letter-spacing:.1em;text-transform:uppercase;font-weight:800;color:var(--muted)}
   .finding .fix{margin-top:10px;padding:11px 13px;background:var(--good-bg);border-radius:6px;font-size:14.5px}
   .finding .fix b{color:var(--good)}
@@ -230,7 +340,7 @@ export function renderReport(d: ReportData): string {
   .footnote{font-size:13px;color:var(--muted);border-top:1px solid var(--line);margin-top:56px;padding-top:20px}
   @media print{
     .wrap{padding:0 10px;max-width:none} body{font-size:12px} h1{font-size:26px}
-    h2{page-break-after:avoid} .finding,.ev,table,.callout,.hero,.step{page-break-inside:avoid}
+    h2{page-break-after:avoid} .finding,.fixblock,.ev,table,.callout,.hero,.step{page-break-inside:avoid}
     .ev img{max-height:340px;object-fit:cover;object-position:top}
   }
 </style>
@@ -268,7 +378,8 @@ ${measured ? `
     ? `<div class="kpi"><div class="k">${d.totalAnswers}</div><div class="l">AI answers analysed</div></div>`
     : `<div class="kpi"><div class="k">${d.promptCount}</div><div class="l">Questions ready to ask</div></div>`}
   <div class="kpi"><div class="k">${d.pageCount}</div><div class="l">Pages audited</div></div>
-  <div class="kpi"><div class="k">${d.criticalFindings.length}</div><div class="l">Critical issues found</div></div>
+  <div class="kpi"><div class="k">${d.fixes.length}</div><div class="l">Changes ready to make</div></div>
+  <div class="kpi"><div class="k">${d.findings.filter((f) => f.severity === 'critical').length}</div><div class="l">Critical issues found</div></div>
 </div>
 
 ${d.markets.length > 1 ? `
@@ -284,6 +395,56 @@ ${d.markets.length > 1 ? `
   </tbody>
 </table></div>
 ` : ''}
+
+${section('The plan, in order')}
+<p class="lede">Ordered by impact per hour of work. The first items cost nothing and take minutes.</p>
+
+${steps.map((s, i) => `
+<div class="step"><div class="n">${i + 1}</div><div class="body">
+  <strong>${esc(s.title)}</strong>
+  <div class="meta">${esc(s.meta)}</div>
+  <p style="margin:6px 0 0;font-size:14.5px">${esc(s.body)}</p>
+</div></div>`).join('')}
+
+${d.fixes.length ? `
+${section('The changes to make')}
+<p class="lede">Every change this audit produced, highest priority first — the exact words to publish, beside what is on the page today. ${
+    blockedCount(d) > 0
+      ? `${blockedCount(d)} of them contain a value only you can confirm; those are marked, and must not be published until the value is filled in.`
+      : 'None of them are waiting on a value only you can confirm.'
+  }</p>
+
+<div class="tbl-scroll"><table>
+  <thead><tr><th>Change</th><th class="num-cell">How many</th></tr></thead>
+  <tbody>
+    ${FIX_KINDS.filter((k) => d.fixes.some((f) => f.kind === k))
+      .map((k) => {
+        const group = d.fixes.filter((f) => f.kind === k)
+        const blocked = group.filter((f) => f.placeholderCount > 0).length
+        return `<tr><td><strong>${esc(FIX_KIND_LABEL[k] ?? k)}</strong><br><span style="font-size:12.5px;color:var(--muted)">${esc(FIX_KIND_NOTE[k] ?? '')}${blocked ? ` · ${blocked} waiting on a value from you` : ''}</span></td><td class="num-cell mine">${group.length}</td></tr>`
+      })
+      .join('\n    ')}
+  </tbody>
+</table></div>
+
+${d.fixes
+  .slice(0, MAX_FIXES_IN_REPORT)
+  .map(
+    (f) => `
+<div class="fixblock${f.placeholderCount > 0 ? ' blocked' : ''}">
+  <div class="cat">${esc(FIX_KIND_LABEL[f.kind] ?? f.kind)}${f.placeholderCount > 0 ? ' · waiting on a value from you' : ''}</div>
+  <div class="where">${esc(f.url ?? f.target ?? 'the site')}</div>
+  ${f.reason ? `<p style="margin:8px 0 0;font-size:14px;color:var(--muted)">${esc(f.reason)}</p>` : ''}
+  ${f.currentValue ? `<div class="was"><b>Now:</b> ${esc(trim(f.currentValue, 400))}</div>` : ''}
+  <div class="now"><b>Change to:</b> ${esc(trim(f.proposedValue, 900))}</div>
+</div>`,
+  )
+  .join('')}
+${
+  d.fixes.length > MAX_FIXES_IN_REPORT
+    ? `<p class="lede">The remaining ${d.fixes.length - MAX_FIXES_IN_REPORT} changes are in the fix pack that accompanies this report, which lists every one in full.</p>`
+    : ''
+}` : ''}
 
 ${measured && d.competitors.length > 0 ? `
 ${section('Who AI recommends instead')}
@@ -340,31 +501,30 @@ comparing an independent business to a national operation is not a fair or usefu
 </table></div>` : ''}
 
 ${section('What is holding you back')}
-${d.criticalFindings.map((f) => `
-<div class="finding">
-  <div class="cat">Critical · ${esc(f.category.replace(/-/g, ' '))}</div>
+<p class="lede">${
+    d.findings.length === 0
+      ? 'Nothing was found at any severity in this audit.'
+      : `Every issue found, worst first — ${SEVERITIES.filter((sev) => bySeverity(d, sev).length)
+          .map((sev) => `${bySeverity(d, sev).length} ${sev}`)
+          .join(', ')}. Nothing is left out of this list.`
+  }</p>
+${SEVERITIES.map((sev) => {
+    const group = bySeverity(d, sev)
+    if (group.length === 0) return ''
+    return `${sev === 'critical' ? '' : `<h3>${SEVERITY_HEADING[sev]}</h3>`}
+${group
+  .map(
+    (f) => `
+<div class="finding ${sev}">
+  <div class="cat">${esc(SEVERITY_LABEL[sev])} · ${esc(f.category.replace(/-/g, ' '))}</div>
   <p style="margin:6px 0 0">${esc(f.issue)}</p>
+  ${f.where ? `<div class="where">${esc(f.where)}</div>` : ''}
+  ${f.currentText ? `<div class="was"><b>Currently:</b> ${esc(trim(f.currentText, 320))}</div>` : ''}
   ${f.proposedText ? `<div class="fix"><b>Fix:</b> ${esc(f.proposedText)}</div>` : ''}
-</div>`).join('')}
-
-${d.highFindings.length ? `<h3>Also significant</h3>
-${d.highFindings.slice(0, 5).map((f) => `
-<div class="finding high">
-  <div class="cat">High · ${esc(f.category.replace(/-/g, ' '))}</div>
-  <p style="margin:6px 0 0">${esc(f.issue)}</p>
-  ${f.proposedText ? `<div class="fix"><b>Fix:</b> ${esc(f.proposedText)}</div>` : ''}
-</div>`).join('')}` : ''}
-
-${section('The plan, in order')}
-<p class="lede">Ordered by impact per hour of work. The first items cost nothing and take minutes.</p>
-
-${steps.map((s, i) => `
-<div class="step"><div class="n">${i + 1}</div><div class="body">
-  <strong>${esc(s.title)}</strong>
-  <div class="meta">${esc(s.meta)}</div>
-  <p style="margin:6px 0 0;font-size:14.5px">${esc(s.body)}</p>
-</div></div>`).join('')}
-
+</div>`,
+  )
+  .join('')}`
+  }).join('')}
 ${d.evidence.length ? `
 ${section('Evidence')}
 <p class="lede">Actual answers, captured on ${esc(d.generatedOn)}.</p>

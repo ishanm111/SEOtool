@@ -5,6 +5,7 @@ import { NoClient } from '../_components/no-client'
 import { PageHeader, Stat, Empty } from '../_components/ui'
 import { SiteConnection } from './connection'
 import { FixCard } from './fix-card'
+import { SaveDocuments } from '../_components/save-documents'
 
 export const dynamic = 'force-dynamic'
 
@@ -54,6 +55,34 @@ export default async function FixesPage({
           value={counts.blocked}
           tone={counts.blocked > 0 ? 'warn' : 'neutral'}
         />
+      </div>
+
+      {/*
+        Not every site can be published to from here — a repository, a
+        hand-built template, a platform with no write API. The fix pack is that
+        case answered: every change in full, in a document somebody can work
+        through by hand or hand to whoever edits the site.
+      */}
+      <div className="card flex flex-wrap items-start justify-between gap-4 p-5">
+        <div className="max-w-xl">
+          <h2 className="display text-lg">Applying these somewhere else</h2>
+          <p className="mt-1 text-sm text-ink-2">
+            The console writes directly to WordPress and Shopify. For a site kept in a repository
+            or edited by hand, take the fix pack instead — all {counts.total} changes with the
+            exact text each one replaces, ready to work through or hand to whoever edits the site.
+          </p>
+        </div>
+        <div className="flex flex-wrap items-start gap-2">
+          <a
+            href={`/api/report?domain=${encodeURIComponent(client.domain)}&doc=fix-pack`}
+            target="_blank"
+            rel="noreferrer"
+            className="btn btn-secondary"
+          >
+            Open the fix pack
+          </a>
+          <SaveDocuments clientId={client.id} label="Save the fix pack as PDF" />
+        </div>
       </div>
 
       <SiteConnection
