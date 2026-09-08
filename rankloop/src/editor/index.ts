@@ -26,4 +26,6 @@ export const WHY_NOT_PUBLISHABLE: Record<string, string> = {
     'Structured data is a block of JSON-LD that has to go in the page template, not in a field. Paste it into the theme or the SEO plugin.',
   new_page:
     'A page that does not exist yet has to be created and placed in the navigation by a person. The copy below is ready to paste.',
+  blog_post:
+    'A post that does not exist yet has to be created, dated and published by a person. The body below is ready to paste, and every highlighted gap has to be filled in first.',
 }

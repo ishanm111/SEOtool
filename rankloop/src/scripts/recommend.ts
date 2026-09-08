@@ -10,6 +10,7 @@ import { loadFacts } from '../lib/facts'
  *
  *   npx tsx src/scripts/recommend.ts --client=1
  *   npx tsx src/scripts/recommend.ts --client=1 --show=new_page
+ *   npx tsx src/scripts/recommend.ts --client=1 --show=blog_post
  */
 
 function main() {
@@ -31,7 +32,37 @@ function main() {
   // The intake answers are what turn a blocked recommendation into a
   // publishable one, so they are loaded on every build rather than optionally.
   const facts = loadFacts(db, client.id)
-  const recs = buildRecommendations({ client, locations, pages, paragraphs, facts })
+
+  /**
+   * The keyword pool behind the blog posts.
+   *
+   * Both are optional and both are read the same way for every client: Search
+   * Console is empty unless the property is verifiably owned, and the question
+   * set is empty until a run has generated one. A client missing either still
+   * gets a full fix list — the pool simply falls back to what the business says
+   * it does.
+   */
+  const searchQueries = db
+    .select()
+    .from(schema.searchQueries)
+    .where(eq(schema.searchQueries.clientId, client.id))
+    .all()
+  const promptRows = db
+    .select()
+    .from(schema.prompts)
+    .where(eq(schema.prompts.clientId, client.id))
+    .all()
+    .filter((p) => p.isActive)
+
+  const recs = buildRecommendations({
+    client,
+    locations,
+    pages,
+    paragraphs,
+    facts,
+    searchQueries,
+    prompts: promptRows,
+  })
   const stats = summarise(recs)
 
   db.delete(schema.recommendations).where(eq(schema.recommendations.clientId, client.id)).run()
