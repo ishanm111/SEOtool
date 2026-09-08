@@ -4,8 +4,9 @@ import { recommendMeta } from './meta'
 import { recommendCopy } from './copy'
 import { recommendSchema } from './schema'
 import { recommendNewPages } from './newpages'
+import { recommendBlogPosts } from './blog'
 
-export type { Recommendation, RecommendInput } from './types'
+export type { Recommendation, RecommendInput, PromptRow, SearchQueryRow } from './types'
 export { countPlaceholders } from './types'
 
 /**
@@ -15,8 +16,18 @@ export { countPlaceholders } from './types'
  * metadata, structured data, and pages that do not exist yet.
  */
 export function buildRecommendations(input: RecommendInput): Recommendation[] {
+  /**
+   * The pages a business needs to exist at all come first, and the posts are
+   * built knowing what they took. A post about "<trade> in <town>" published
+   * beside the location page for that town splits the exact signal that page
+   * exists to concentrate.
+   */
+  const newPages = recommendNewPages(input)
+  const claimed = new Set(newPages.map((r) => r.target.toLowerCase()))
+
   return [
-    ...recommendNewPages(input),
+    ...newPages,
+    ...recommendBlogPosts(input, claimed),
     ...recommendCopy(input),
     ...recommendMeta(input),
     ...recommendSchema(input),
