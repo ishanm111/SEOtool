@@ -26,6 +26,7 @@ const KIND_LABEL: Record<string, string> = {
   copy: 'Body copy',
   schema: 'Structured data (JSON-LD)',
   new_page: 'New page',
+  blog_post: 'New blog post',
 }
 
 /** What a person has to do with each kind, since none of these are published from here. */
@@ -35,9 +36,11 @@ const KIND_HOW: Record<string, string> = {
   copy: 'Find the text under "Replaces" exactly as written and swap it for the new text. If it cannot be found exactly, leave it and say so — a fuzzy match on a live page is not worth the risk.',
   schema: 'Add as a <script type="application/ld+json"> block in the page template. Do not merge it into an existing block by hand; replace the block or add a second one.',
   new_page: 'Create the page at the slug given, paste the body, and link it from the navigation.',
+  blog_post:
+    'Publish as a post at the slug given. Fill in every highlighted gap first — a post is the easiest place to publish a number nobody checked. Link it from the service or collection page it is about.',
 }
 
-const ORDER = ['meta_title', 'meta_description', 'copy', 'schema', 'new_page']
+const ORDER = ['meta_title', 'meta_description', 'copy', 'schema', 'new_page', 'blog_post']
 
 function fixBlock(fix: ReportFix, index: number): string {
   return `

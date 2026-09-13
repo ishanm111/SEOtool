@@ -8,13 +8,14 @@ export const dynamic = 'force-dynamic'
 
 const KIND_LABEL: Record<string, string> = {
   new_page: 'New page',
+  blog_post: 'Blog post',
   copy: 'Copy rewrite',
   meta_title: 'Page title',
   meta_description: 'Meta description',
   schema: 'Structured data',
 }
 
-const KIND_ORDER = ['new_page', 'copy', 'meta_title', 'meta_description', 'schema']
+const KIND_ORDER = ['new_page', 'blog_post', 'copy', 'meta_title', 'meta_description', 'schema']
 
 function Placeholders({ text }: { text: string }) {
   // Highlight every [[FILL: …]] so what still needs a human is impossible to miss.

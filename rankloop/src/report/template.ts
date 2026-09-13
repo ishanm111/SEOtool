@@ -88,6 +88,15 @@ export type ReportData = {
 
   evidence: { engine: string; question: string; excerpt: string; image?: string }[]
   generatedPageCount: number
+  /**
+   * The posts to publish, listed by their headline rather than by a count.
+   *
+   * A client told "12 blog posts" has been told a number; a client shown the
+   * twelve questions their site does not answer can see the work, and can say
+   * which of them is wrong before anybody writes it. The body of each one is in
+   * the fix pack — this is the running order.
+   */
+  blogPosts: { target: string; title: string; reason: string; placeholderCount: number }[]
 }
 
 const SEVERITIES = ['critical', 'high', 'medium', 'low'] as const
@@ -113,7 +122,7 @@ const bySeverity = (d: ReportData, sev: Severity) => d.findings.filter((f) => f.
 /** Fixes carrying a value only the business can confirm. */
 const blockedCount = (d: ReportData) => d.fixes.filter((f) => f.placeholderCount > 0).length
 
-const FIX_KINDS = ['meta_title', 'meta_description', 'copy', 'schema', 'new_page'] as const
+const FIX_KINDS = ['meta_title', 'meta_description', 'copy', 'schema', 'new_page', 'blog_post'] as const
 
 const FIX_KIND_LABEL: Record<string, string> = {
   meta_title: 'Page title',
@@ -121,6 +130,7 @@ const FIX_KIND_LABEL: Record<string, string> = {
   copy: 'Words on the page',
   schema: 'Business details in the page code',
   new_page: 'A page you do not have yet',
+  blog_post: 'A question your site does not answer',
 }
 
 const FIX_KIND_NOTE: Record<string, string> = {
@@ -129,6 +139,7 @@ const FIX_KIND_NOTE: Record<string, string> = {
   copy: 'rewritten paragraphs, replacing the exact text quoted',
   schema: 'JSON-LD for the page template, invisible to visitors',
   new_page: 'written in full, ready to publish',
+  blog_post: 'a post built around what people actually search for',
 }
 
 /**
@@ -216,6 +227,14 @@ function buildSteps(d: ReportData): Step[] {
           body: 'Comparison and buying-guide content is what AI assistants quote when someone asks which product to choose. Product pages alone rarely get cited.',
         },
   )
+
+  if (d.blogPosts.length > 0) {
+    steps.push({
+      title: 'Answer the questions your customers are asking',
+      meta: `${d.blogPosts.length} post${d.blogPosts.length === 1 ? '' : 's'} written and ready`,
+      body: 'These come from what people actually search for and from the questions we put to the AI engines. An assistant asked a question quotes whoever answered it — a service or product page almost never gets cited for one, and right now the answer it quotes is a competitor.',
+    })
+  }
 
   if (d.hasGoogleProfile && d.gbp.reviewCount !== null) {
     const ratingOk = d.gbp.rating !== null && d.gbp.rating >= Math.max(...Object.values(d.thresholds))
@@ -405,6 +424,25 @@ ${steps.map((s, i) => `
   <div class="meta">${esc(s.meta)}</div>
   <p style="margin:6px 0 0;font-size:14.5px">${esc(s.body)}</p>
 </div></div>`).join('')}
+
+${d.blogPosts.length ? `
+${section('The posts to publish')}
+<p class="lede">Every question your site does not answer, in the order to write them. Each one is drafted in full — the opening answer, the sections, the questions underneath and the structured data — in the fix pack that accompanies this report.${
+    d.blogPosts.some((b) => b.placeholderCount > 0)
+      ? ' Where a draft needs a price, a timescale or a guarantee, it says so rather than guessing, and those are marked below.'
+      : ''
+  }</p>
+
+<div class="tbl-scroll"><table>
+  <thead><tr><th>Post</th><th>Why</th></tr></thead>
+  <tbody>
+    ${d.blogPosts
+      .map(
+        (b) => `<tr><td><strong>${esc(b.title)}</strong><br><span style="font-size:12.5px;color:var(--muted)">${esc(b.target)}${b.placeholderCount > 0 ? ` · ${b.placeholderCount} value${b.placeholderCount === 1 ? '' : 's'} for you to confirm` : ''}</span></td><td style="font-size:13px;color:var(--muted)">${esc(b.reason)}</td></tr>`,
+      )
+      .join('\n    ')}
+  </tbody>
+</table></div>` : ''}
 
 ${d.fixes.length ? `
 ${section('The changes to make')}

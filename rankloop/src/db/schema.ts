@@ -222,7 +222,7 @@ export const recommendations = sqliteTable('recommendations', {
   clientId: integer('client_id').notNull().references(() => clients.id),
   /** Null when the recommendation is a brand-new page rather than an edit. */
   pageId: integer('page_id').references(() => pages.id),
-  /** meta_title | meta_description | copy | schema | new_page */
+  /** meta_title | meta_description | copy | schema | new_page | blog_post */
   kind: text('kind').notNull(),
   target: text('target').notNull().default(''),
   currentValue: text('current_value'),

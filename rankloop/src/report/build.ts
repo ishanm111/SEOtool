@@ -121,6 +121,18 @@ export function collectReportData(
   // New pages are recommendations now; the old generated_pages table is dead.
   const generated = () => allFixes.filter((r) => r.kind === 'new_page')
 
+  /**
+   * The headline of a drafted post, read back off the draft itself.
+   *
+   * Taken from the <h1> the recommender wrote rather than stored beside it, so
+   * the report and the fix pack can never name the same post two different
+   * things — there is only one place the title exists.
+   */
+  const headlineOf = (html: string, fallback: string) => {
+    const match = /<h1[^>]*>([\s\S]*?)<\/h1>/i.exec(html)
+    return match ? match[1].replace(/<[^>]+>/g, '').trim() : fallback
+  }
+
   const okRuns = runs.filter(isAnswer)
   const named = okRuns.filter((r) => mentionsClient(r.answerText, client)).length
 
@@ -279,6 +291,14 @@ export function collectReportData(
     thresholds: RATING_THRESHOLDS,
     evidence,
     generatedPageCount: generated().length,
+    blogPosts: allFixes
+      .filter((r) => r.kind === 'blog_post')
+      .map((r) => ({
+        target: r.target,
+        title: headlineOf(r.proposedValue, r.target),
+        reason: r.reason,
+        placeholderCount: r.placeholderCount,
+      })),
   }
 
   return data

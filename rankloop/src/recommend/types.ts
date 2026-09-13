@@ -7,7 +7,7 @@ import type { ClientFacts } from '../onboard/questionnaire'
  */
 export type Recommendation = {
   pageId: number | null
-  kind: 'meta_title' | 'meta_description' | 'copy' | 'schema' | 'new_page'
+  kind: 'meta_title' | 'meta_description' | 'copy' | 'schema' | 'new_page' | 'blog_post'
   /** What this touches, in human terms: a URL, or a page that should exist. */
   target: string
   currentValue: string | null
@@ -43,11 +43,40 @@ export type ParagraphRow = {
   readability: number
 }
 
+/**
+ * A real search query from Search Console — what somebody typed to reach this
+ * site, not an estimate of what a term might be worth.
+ */
+export type SearchQueryRow = {
+  query: string
+  clicks: number
+  impressions: number
+  position: number
+}
+
+/** One question from the set we put to the AI engines. */
+export type PromptRow = {
+  text: string
+  intent: string
+}
+
 export type RecommendInput = {
   client: Client
   locations: ClientLocation[]
   pages: PageRow[]
   paragraphs: ParagraphRow[]
+  /**
+   * Search Console queries, when the operator or client verifiably owns the
+   * property. Empty for everyone else, and nothing may require them: a client
+   * without Search Console still gets a full fix list, built from the question
+   * set and its own offerings instead.
+   */
+  searchQueries?: SearchQueryRow[]
+  /**
+   * The questions this client is measured on. A topic the engines were asked
+   * about and the site never covers is a gap the tool found itself.
+   */
+  prompts?: PromptRow[]
   /**
    * Answers to the intake questionnaire. Where one exists it is used verbatim;
    * where it does not, the placeholder stays. Nothing here is ever guessed at

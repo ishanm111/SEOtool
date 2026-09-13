@@ -44,8 +44,14 @@ which businesses were named, in what order, and which sources were cited.
 the same scale as the client: page counts, location pages, FAQ blocks,
 statistics density, readability, structured data.
 
-**Recommends** — titles, meta descriptions, copy rewrites, JSON-LD, and whole
-pages the site is missing. Never design; only words, metadata and structure.
+**Recommends** — titles, meta descriptions, copy rewrites, JSON-LD, whole
+pages the site is missing, and the blog posts that answer the questions it
+never does. Never design; only words, metadata and structure.
+
+Blog topics are not invented. They are clustered out of every search term the
+tool holds for a client — real Search Console queries where the property is
+owned, the questions put to the AI engines, and the client's own offerings —
+then filtered down to the ones no existing page answers.
 
 ## The research it is built on
 
@@ -108,7 +114,7 @@ src/
   prompts/     question generation, per business type
   engines/     browser automation, Google, DataForSEO, Search Console
   analysis/    answer parsing, findings, competitor crawling
-  recommend/   meta, copy, schema, new pages
+  recommend/   meta, copy, schema, new pages, blog posts from the keyword pool
   report/      the client-facing audit
   app/         dashboard
 ```

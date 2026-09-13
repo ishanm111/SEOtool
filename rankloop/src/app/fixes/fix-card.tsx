@@ -21,6 +21,7 @@ const KIND_LABEL: Record<string, string> = {
   copy: 'Body copy',
   schema: 'Structured data',
   new_page: 'New page',
+  blog_post: 'Blog post',
 }
 
 function ApplyButton({ label }: { label: string }) {
