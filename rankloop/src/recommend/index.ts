@@ -6,7 +6,7 @@ import { recommendSchema } from './schema'
 import { recommendNewPages } from './newpages'
 import { recommendBlogPosts } from './blog'
 
-export type { Recommendation, RecommendInput, PromptRow, SearchQueryRow } from './types'
+export type { Recommendation, RecommendInput, PromptRow, SearchQueryRow, GoogleTermRow } from './types'
 export { countPlaceholders } from './types'
 
 /**

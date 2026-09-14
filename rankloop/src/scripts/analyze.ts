@@ -4,7 +4,10 @@ import { resolveClient, clientLocations } from '../lib/resolve-client'
 import { extractMentions, isAnswer, mentionsClient } from '../analysis/parse'
 import { buildFindings, type MarketRate } from '../analysis/findings'
 import { groupByMarket, marketKeyOf } from '../lib/markets'
+import { buildResearchFindings } from '../analysis/research'
 import { JUNK_CITATION_DOMAINS } from '../config'
+
+const SEVERITY_RANK = { critical: 0, high: 1, medium: 2, low: 3 } as const
 
 function main() {
   const db = openDb()
@@ -115,15 +118,44 @@ function main() {
     .all()
     .filter((r) => r.source === 'manual')
 
+  const snapshots = db
+    .select()
+    .from(schema.serpSnapshots)
+    .where(eq(schema.serpSnapshots.clientId, client.id))
+    .all()
+  const profiles = db
+    .select()
+    .from(schema.businessProfiles)
+    .where(eq(schema.businessProfiles.clientId, client.id))
+    .all()
+
   if (manualBar.length === 0) {
     const best = new Map<string, { rating: number | null; reviewCount: number }>()
+    type PackEntry = { title: string; rating: number | null; ratingCount: number | null }
+    const packs: PackEntry[][] = []
     for (const run of runs.filter((r) => r.engine === 'google_aio' && r.ok && r.rawPayload)) {
-      let pack: { title: string; rating: number | null; ratingCount: number | null }[] = []
       try {
-        pack = JSON.parse(run.rawPayload!).localPack ?? []
+        packs.push(JSON.parse(run.rawPayload!).localPack ?? [])
       } catch {
         continue
       }
+    }
+    // The research pass searched from inside the client's own towns, so its map packs count too.
+    for (const snap of snapshots.filter((s) => s.ok)) {
+      try {
+        packs.push(JSON.parse(snap.localPack))
+      } catch {
+        continue
+      }
+    }
+    /**
+     * A review count read off the listing itself beats one read off a map-pack
+     * line: the pack truncates, and the listing is the number Google holds.
+     */
+    for (const p of profiles.filter((x) => x.ok && !x.isClient && x.reviewCount !== null)) {
+      packs.push([{ title: p.businessName, rating: p.rating, ratingCount: p.reviewCount }])
+    }
+    for (const pack of packs) {
       for (const e of pack) {
         if (!e.ratingCount || !e.title) continue
         const prev = best.get(e.title)
@@ -149,7 +181,7 @@ function main() {
             businessName,
             rating: v.rating,
             reviewCount: v.reviewCount,
-            source: 'google_browser',
+            source: snapshots.length > 0 ? 'google_research' : 'google_browser',
           })),
         )
         .run()
@@ -171,17 +203,33 @@ function main() {
     .where(eq(schema.competitiveBar.clientId, client.id))
     .all()
 
-  const findings = buildFindings({
-    client,
-    locations,
-    pages,
-    paragraphs,
-    runs,
-    clientMentionRate: { named, total: okRuns.length },
-    marketRates,
-    competitors,
-    competitiveBar,
-  })
+  const findings = [
+    ...buildFindings({
+      client,
+      locations,
+      pages,
+      paragraphs,
+      runs,
+      clientMentionRate: { named, total: okRuns.length },
+      marketRates,
+      competitors,
+      competitiveBar,
+    }),
+    /**
+     * What Google itself shows the client's customers. Empty until
+     * `npm run research` has run, and nothing above depends on it.
+     */
+    ...buildResearchFindings({
+      client,
+      snapshots,
+      profiles,
+      pages,
+      placeNames: locations.flatMap((l) => [l.name, l.region, l.metro]).filter(Boolean),
+    }),
+  ].sort((a, b) => SEVERITY_RANK[a.severity] - SEVERITY_RANK[b.severity])
+  if (snapshots.length > 0) {
+    console.log(`google research: ${snapshots.filter((s) => s.ok).length} searches, ${profiles.filter((p) => p.ok).length} listings folded into the findings\n`)
+  }
 
   if (findings.length > 0) {
     db.insert(schema.findings)

@@ -2,6 +2,7 @@ import path from 'node:path'
 import type { BrowserContext, Page } from 'playwright'
 import type { LocalPackEntry } from './dataforseo'
 import { MIN_ANSWER_CHARS } from '../config'
+import { extractMapPack, extractOrganic } from '../research/serp-text'
 
 /**
  * Reads Google's AI Overview and local map pack through a real browser.
@@ -32,7 +33,7 @@ export type GoogleBrowserResult = {
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
 
 /** Consent walls and bot checks — detected so they are never read as "no results". */
-async function detectBlock(page: Page): Promise<string | null> {
+export async function detectBlock(page: Page): Promise<string | null> {
   const url = page.url()
   if (/consent\.google|\/sorry\//.test(url)) {
     return url.includes('/sorry/')
@@ -55,7 +56,7 @@ async function detectBlock(page: Page): Promise<string | null> {
  * map-pack entry is always a name followed by a rating and a count. Those
  * survive redesigns because they are what the page means, not how it is built.
  */
-async function pageText(page: Page): Promise<string> {
+export async function pageText(page: Page): Promise<string> {
   // The AI Overview streams in, so wait until the text stops growing.
   const deadline = Date.now() + 20_000
   let last = ''
@@ -74,7 +75,7 @@ async function pageText(page: Page): Promise<string> {
   return last
 }
 
-function extractAiOverview(text: string): string {
+export function extractAiOverview(text: string): string {
   const marker = text.indexOf('AI Overview')
   if (marker === -1) return ''
 
@@ -97,72 +98,18 @@ function extractAiOverview(text: string): string {
 }
 
 /**
- * The map pack, as name / rating / review-count triples.
- *
- * Google's SERP markup is obfuscated and changes constantly, so this reads the
- * rendered TEXT of the local block instead of relying on class names — a rating
- * line looks like "4.8 (212)" whatever the surrounding DOM is called that week.
+ * Map-pack entries and organic results, parsed from the page text. The parsers
+ * live in research/serp-text.ts, shared with the research pass, because
+ * Google's layout changed under both: ratings moved onto one line as
+ * "4.8(1.3K)" and result links moved behind a "/goto" redirect, which left this
+ * adapter returning an empty map pack and no organic results.
  */
-/**
- * Map-pack entries, which Google renders as three consecutive lines:
- *
- *   Appliance Doctor Inc
- *   4.8
- *   (115)
- *
- * The rating and the count sit on separate lines, so a single-line regex finds
- * nothing — which is exactly how the first attempt returned an empty map pack
- * while the data was plainly on screen.
- */
-function extractLocalPack(text: string): LocalPackEntry[] {
-  const lines = text.split('\n').map((l) => l.trim())
-  const out: LocalPackEntry[] = []
-
-  for (let i = 0; i < lines.length - 2; i++) {
-    if (!/^[0-5](?:\.\d)?$/.test(lines[i + 1])) continue
-    if (!/^\(\d[\d,]*\)$/.test(lines[i + 2])) continue
-
-    const name = lines[i]
-    if (name.length < 3 || name.length > 70) continue
-    if (!/^[A-Z0-9]/.test(name)) continue
-    if (/^(sponsored|ads?|rating|reviews?|website|directions|top |people also)/i.test(name)) continue
-    if (out.some((e) => e.title === name)) continue
-
-    out.push({
-      title: name,
-      rating: Number(lines[i + 1]),
-      ratingCount: Number(lines[i + 2].replace(/[(),]/g, '')),
-      url: null,
-      position: out.length + 1,
-    })
-    if (out.length >= 5) break
-  }
-
-  return out
+export function extractLocalPack(text: string): LocalPackEntry[] {
+  return extractMapPack(text)
 }
 
-async function readOrganic(page: Page) {
-  const results: { title: string; url: string; domain: string; position: number }[] = []
-  const links = page.locator('#search a[href^="http"] h3')
-  const n = await links.count().catch(() => 0)
-
-  for (let i = 0; i < Math.min(n, 10); i++) {
-    const h3 = links.nth(i)
-    const title = (await h3.innerText().catch(() => '')) ?? ''
-    const href = await h3
-      .locator('xpath=ancestor::a[1]')
-      .getAttribute('href')
-      .catch(() => null)
-    if (!title || !href) continue
-    try {
-      const domain = new URL(href).hostname.replace(/^www\./, '')
-      if (/google\./.test(domain)) continue
-      results.push({ title, url: href, domain, position: results.length + 1 })
-    } catch {
-      // malformed href — skip
-    }
-  }
-  return results
+export async function readOrganic(page: Page) {
+  return extractOrganic(await page.locator('body').innerText().catch(() => ''))
 }
 
 export async function askGoogleViaBrowser(

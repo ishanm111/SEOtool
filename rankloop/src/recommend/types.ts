@@ -54,6 +54,16 @@ export type SearchQueryRow = {
   position: number
 }
 
+/**
+ * A phrase Google showed for one of the research searches: a "People also ask"
+ * question, a related search, or an autocomplete completion. One row per
+ * appearance, so a phrase seen under several searches counts for more.
+ */
+export type GoogleTermRow = {
+  text: string
+  kind: 'people_also_ask' | 'related' | 'suggestion'
+}
+
 /** One question from the set we put to the AI engines. */
 export type PromptRow = {
   text: string
@@ -77,6 +87,11 @@ export type RecommendInput = {
    * about and the site never covers is a gap the tool found itself.
    */
   prompts?: PromptRow[]
+  /**
+   * What Google showed people searching for this business's topics, from the
+   * browser research pass. Empty until one has run; nothing requires it.
+   */
+  googleTerms?: GoogleTermRow[]
   /**
    * Answers to the intake questionnaire. Where one exists it is used verbatim;
    * where it does not, the placeholder stays. Nothing here is ever guessed at
