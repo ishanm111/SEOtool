@@ -15,6 +15,7 @@ export type StepKey =
   | 'ingest'
   | 'prompts'
   | 'measure'
+  | 'research'
   | 'competitors'
   | 'analyze'
   | 'recommend'
@@ -57,6 +58,15 @@ export const PIPELINE: StepDef[] = [
     description: 'Puts each question to the chat engines and screenshots the answer.',
     script: 'src/scripts/measure.ts',
     duration: '20–90 minutes',
+    usesBrowser: true,
+  },
+  {
+    key: 'research',
+    label: 'Research Google',
+    description:
+      'Searches Google from inside the client’s towns: AI Overview and its sources, map pack, top 10, People also ask, search suggestions, ads, and rivals’ review pace on Maps.',
+    script: 'src/scripts/research.ts',
+    duration: '10–20 minutes',
     usesBrowser: true,
   },
   {

@@ -95,8 +95,16 @@ function filesOf(
   const { answers, pipelineRunIds } = treeOf(db, clientId)
   const client = db.select().from(schema.clients).where(eq(schema.clients.id, clientId)).all()[0]
 
+  const searches = db
+    .select({ screenshotPath: schema.serpSnapshots.screenshotPath })
+    .from(schema.serpSnapshots)
+    .where(eq(schema.serpSnapshots.clientId, clientId))
+    .all()
+
   const screenshots = [
-    ...new Set(answers.map((a) => a.screenshotPath).filter((p): p is string => !!p)),
+    ...new Set(
+      [...answers, ...searches].map((a) => a.screenshotPath).filter((p): p is string => !!p),
+    ),
   ].filter((p) => fs.existsSync(p))
 
   const reports = [
@@ -208,6 +216,8 @@ export function deleteClient(
     tx.delete(schema.findings).where(eq(schema.findings.clientId, clientId)).run()
     tx.delete(schema.competitors).where(eq(schema.competitors.clientId, clientId)).run()
     tx.delete(schema.searchQueries).where(eq(schema.searchQueries.clientId, clientId)).run()
+    tx.delete(schema.serpSnapshots).where(eq(schema.serpSnapshots.clientId, clientId)).run()
+    tx.delete(schema.businessProfiles).where(eq(schema.businessProfiles.clientId, clientId)).run()
     tx.delete(schema.siteCredentials).where(eq(schema.siteCredentials.clientId, clientId)).run()
     tx.delete(schema.clientFacts).where(eq(schema.clientFacts.clientId, clientId)).run()
 

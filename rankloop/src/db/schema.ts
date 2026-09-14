@@ -258,6 +258,97 @@ export const searchQueries = sqliteTable('search_queries', {
 })
 
 /**
+ * One Google search, read through a real browser, as seen from the client's
+ * own town.
+ *
+ * This is the free replacement for the DataForSEO SERP and keyword endpoints.
+ * Everything the paid API was bought for is captured here, plus the two things
+ * that API priced separately and Google shows anyone for nothing: the questions
+ * people ask next ("People also ask") and the phrases Google itself completes a
+ * search to — which only appear for terms with real demand.
+ *
+ * What it cannot give is an absolute monthly volume. Nothing here pretends to.
+ */
+export const serpSnapshots = sqliteTable('serp_snapshots', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  clientId: integer('client_id').notNull().references(() => clients.id),
+  locationId: integer('location_id').references(() => locations.id),
+  query: text('query').notNull(),
+  /** Why this was searched: question | service | brand | reviews. */
+  queryKind: text('query_kind').notNull().default('question'),
+  /** The Google location name the search was pinned to, or '' for none. */
+  searchedFrom: text('searched_from').notNull().default(''),
+
+  aiOverviewText: text('ai_overview_text').notNull().default(''),
+  /** JSON [{url, domain, title}] — the sources the AI Overview linked to. */
+  aiOverviewSources: text('ai_overview_sources').notNull().default('[]'),
+  clientInAiOverview: integer('client_in_ai_overview', { mode: 'boolean' }).notNull().default(false),
+  clientCitedInAiOverview: integer('client_cited_in_ai_overview', { mode: 'boolean' })
+    .notNull()
+    .default(false),
+
+  /** JSON [{title, rating, ratingCount, position}]. */
+  localPack: text('local_pack').notNull().default('[]'),
+  /** 1-based, null when the client is not in the map pack. */
+  clientPackPosition: integer('client_pack_position'),
+
+  /** JSON [{title, url, domain, position}]. */
+  organic: text('organic').notNull().default('[]'),
+  clientOrganicPosition: integer('client_organic_position'),
+
+  /** JSON string[] — "People also ask", verbatim. */
+  peopleAlsoAsk: text('people_also_ask').notNull().default('[]'),
+  /** JSON string[] — "People also search for" / "Related searches". */
+  relatedSearches: text('related_searches').notNull().default('[]'),
+  /** JSON string[] — what Google's search box completed this query to. */
+  suggestions: text('suggestions').notNull().default('[]'),
+  /**
+   * Paid results on the page. Advertisers only pay for terms that convert, so
+   * this is the free stand-in for a cost-per-click figure: not a price, but a
+   * reliable sign of which searches are worth money.
+   */
+  adsCount: integer('ads_count').notNull().default(0),
+
+  screenshotPath: text('screenshot_path'),
+  ok: integer('ok', { mode: 'boolean' }).notNull().default(true),
+  error: text('error'),
+  capturedAt: integer('captured_at', { mode: 'timestamp' }).$defaultFn(now),
+})
+
+/**
+ * A business's public Google listing, read from Maps — the client's and every
+ * rival that held a map-pack spot in the research.
+ *
+ * The free replacement for the DataForSEO Business Data API. Review velocity is
+ * the number that matters most: a rival with 900 reviews and none this year is
+ * beatable, and one gaining twenty a month is not caught by a website change.
+ */
+export const businessProfiles = sqliteTable('business_profiles', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  clientId: integer('client_id').notNull().references(() => clients.id),
+  businessName: text('business_name').notNull(),
+  isClient: integer('is_client', { mode: 'boolean' }).notNull().default(false),
+  /** The search the listing was found through. */
+  searchedAs: text('searched_as').notNull().default(''),
+  rating: real('rating'),
+  reviewCount: integer('review_count'),
+  category: text('category'),
+  website: text('website'),
+  hasHours: integer('has_hours', { mode: 'boolean' }),
+  /** True when Maps offers "Own this business?" — nobody has claimed it. */
+  unclaimed: integer('unclaimed', { mode: 'boolean' }),
+  /** Reviews dated within the last 30 days, among the newest Maps would show. Null = not read. */
+  reviewsLast30Days: integer('reviews_last_30_days'),
+  /** How old the newest review is, in days. Null = not read. */
+  newestReviewDays: integer('newest_review_days'),
+  /** How many of the newest reviews the velocity figure was counted from. */
+  reviewsSampled: integer('reviews_sampled').notNull().default(0),
+  ok: integer('ok', { mode: 'boolean' }).notNull().default(true),
+  error: text('error'),
+  capturedAt: integer('captured_at', { mode: 'timestamp' }).$defaultFn(now),
+})
+
+/**
  * DEPRECATED — retained only so the phase-one backfill is not lost.
  *
  * Nothing reads or writes this any more. Pages the site is missing are now

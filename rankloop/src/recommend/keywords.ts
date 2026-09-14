@@ -1,7 +1,7 @@
 import type { Client, ClientLocation } from '../lib/client'
 import { normaliseState } from '../onboard/us-states'
 import { deriveTrade, isVisitTrade, splitOffering } from '../lib/trade'
-import { SUPERLATIVE_PATTERN, type PromptRow, type SearchQueryRow } from './types'
+import { SUPERLATIVE_PATTERN, type GoogleTermRow, type PromptRow, type SearchQueryRow } from './types'
 
 /**
  * Every search term the tool knows about a client, in one pool.
@@ -15,6 +15,11 @@ import { SUPERLATIVE_PATTERN, type PromptRow, type SearchQueryRow } from './type
  *    demand, but it is the exact wording the client is being judged on, so a
  *    topic the engines were asked about and the site never covers is a gap
  *    this tool measured itself.
+ *  - Google research: the questions under "People also ask", the phrases Google
+ *    completes a search to, and its related searches, read through a browser.
+ *    No volume attached — but Google only shows a phrase that people search,
+ *    so this is evidence of demand where Search Console has none, in the exact
+ *    words customers use.
  *  - The client's own offerings: the floor. A site with no Search Console
  *    access and no run yet still gets a keyword pool, derived from what the
  *    business says it does.
@@ -23,7 +28,7 @@ import { SUPERLATIVE_PATTERN, type PromptRow, type SearchQueryRow } from './type
  * record, exactly as everywhere else in this module.
  */
 
-export type KeywordSource = 'search_console' | 'question_set' | 'offering'
+export type KeywordSource = 'search_console' | 'google' | 'question_set' | 'offering'
 
 export type Keyword = {
   /** The phrase as it was searched or asked. Kept verbatim for FAQ headings. */
@@ -31,6 +36,8 @@ export type Keyword = {
   source: KeywordSource
   /** Real Search Console impressions. Zero for a term the tool derived itself. */
   impressions: number
+  /** How many Google searches showed this phrase. Zero for any other source. */
+  googleHits?: number
   clicks: number
   /** Average Google position, or null for a term that was never measured. */
   position: number | null
@@ -289,6 +296,7 @@ function pool(input: {
   locations: ClientLocation[]
   searchQueries: SearchQueryRow[]
   prompts: PromptRow[]
+  googleTerms?: GoogleTermRow[]
 }): Keyword[] {
   const { client, locations, searchQueries, prompts } = input
   const { places, noise } = vocabulary(client, locations)
@@ -304,7 +312,13 @@ function pool(input: {
     // A term that is nothing but the client's own name and a town says nothing
     // about a topic, and two of them would cluster with each other.
     if (stem.length === 0) return
-    const display = displayText(clean, noise)
+    /**
+     * Google's own questions keep every word but the towns. They arrive already
+     * free of the client's name, and stripping brand words from them turned
+     * "Is it worth it to fix an appliance?" into "Is it worth it an appliance?"
+     * for a business whose name happens to start with "Fix".
+     */
+    const display = displayText(clean, source === 'google' ? places : noise)
     if (display.length < 8) return
     seen.add(key)
     out.push({
@@ -326,6 +340,26 @@ function pool(input: {
       position: q.position,
     })
   }
+  /**
+   * Google's own phrasing next, counted: a question that "People also ask"
+   * showed under four different searches is asked more than one it showed
+   * under once. Questions before completions, because a question is an article
+   * and a completion is often a service query the location pages own.
+   */
+  const googleCounts = new Map<string, { text: string; hits: number; question: boolean }>()
+  for (const t of input.googleTerms ?? []) {
+    const key = t.text.trim().toLowerCase()
+    const prev = googleCounts.get(key)
+    googleCounts.set(key, {
+      text: prev?.text ?? t.text,
+      hits: (prev?.hits ?? 0) + 1,
+      question: (prev?.question ?? false) || t.kind === 'people_also_ask',
+    })
+  }
+  for (const g of [...googleCounts.values()].sort((a, b) => Number(b.question) - Number(a.question) || b.hits - a.hits)) {
+    push(g.text, 'google', { googleHits: g.hits })
+  }
+
   for (const p of prompts) {
     if (MEASUREMENT_ONLY.has(p.intent)) continue
     push(p.text, 'question_set')
@@ -353,7 +387,13 @@ function pool(input: {
 const MEASUREMENT_ONLY = new Set(['comparison', 'brand'])
 
 const weightOf = (k: Keyword) =>
-  k.source === 'search_console' ? 100 + k.impressions : k.source === 'question_set' ? 2 : 1
+  k.source === 'search_console'
+    ? 100 + k.impressions
+    : k.source === 'google'
+      ? 3 + Math.min(k.googleHits ?? 1, 90)
+      : k.source === 'question_set'
+        ? 2
+        : 1
 
 /** How much two terms are about the same thing. */
 function overlap(a: string[], b: string[]): number {
@@ -426,8 +466,14 @@ export function topicCandidates(cluster: KeywordCluster): Keyword[] {
   const asking = cluster.keywords.filter(
     (k) => isInformational(k.text) && !SUPERLATIVE_PATTERN.test(k.display),
   )
+  // Then Google's own wording, which is how the question is really phrased.
   const measured = asking.filter((k) => k.source === 'search_console')
-  const ranked = [...measured, ...asking.filter((k) => k.source !== 'search_console')]
+  const google = asking.filter((k) => k.source === 'google')
+  const ranked = [
+    ...measured,
+    ...google,
+    ...asking.filter((k) => k.source !== 'search_console' && k.source !== 'google'),
+  ]
   return ranked.length > 0 ? ranked : cluster.keywords.slice(0, 1)
 }
 
@@ -454,6 +500,7 @@ export function keywordTopics(input: {
   locations: ClientLocation[]
   searchQueries: SearchQueryRow[]
   prompts: PromptRow[]
+  googleTerms?: GoogleTermRow[]
 }): KeywordCluster[] {
   return clusterKeywords(pool(input)).filter((c) => c.keywords.some((k) => isInformational(k.text)))
 }

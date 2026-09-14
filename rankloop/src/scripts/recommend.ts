@@ -1,9 +1,10 @@
 import { eq, inArray } from 'drizzle-orm'
 import { openDb, schema } from '../db/raw'
 import { resolveClient, clientLocations } from '../lib/resolve-client'
-import { buildRecommendations, countPlaceholders, summarise } from '../recommend'
+import { buildRecommendations, countPlaceholders, summarise, type GoogleTermRow } from '../recommend'
 import { arg } from '../lib/args'
 import { loadFacts } from '../lib/facts'
+import { isNavigational, isOnTopic, topicWords } from '../research/relevance'
 
 /**
  * Produces the deliverable: what to change, page by page.
@@ -54,6 +55,44 @@ function main() {
     .all()
     .filter((p) => p.isActive)
 
+  /**
+   * What Google showed for the research searches — its "People also ask"
+   * questions, completions and related searches. One row per appearance, so a
+   * question Google raised under several searches weighs more.
+   */
+  const googleTerms: GoogleTermRow[] = []
+  const parseList = (raw: string): string[] => {
+    try {
+      const v = JSON.parse(raw)
+      return Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string') : []
+    } catch {
+      return []
+    }
+  }
+  const snapshots = db
+    .select()
+    .from(schema.serpSnapshots)
+    .where(eq(schema.serpSnapshots.clientId, client.id))
+    .all()
+    .filter((s) => s.ok)
+  // Off-topic drift and searches for a named rival never become a post.
+  const topic = topicWords(client)
+  const businessNames = snapshots.flatMap((s) => {
+    try {
+      return (JSON.parse(s.localPack) as { title: string }[]).map((e) => e.title)
+    } catch {
+      return []
+    }
+  })
+  const keep = (text: string) =>
+    isOnTopic(text, topic) && !isNavigational(text, businessNames) &&
+    !client.aliases.some((a) => text.toLowerCase().includes(a))
+  for (const snap of snapshots) {
+    for (const text of parseList(snap.peopleAlsoAsk).filter(keep)) googleTerms.push({ text, kind: 'people_also_ask' })
+    for (const text of parseList(snap.relatedSearches).filter(keep)) googleTerms.push({ text, kind: 'related' })
+    for (const text of parseList(snap.suggestions).filter(keep)) googleTerms.push({ text, kind: 'suggestion' })
+  }
+
   const recs = buildRecommendations({
     client,
     locations,
@@ -62,6 +101,7 @@ function main() {
     facts,
     searchQueries,
     prompts: promptRows,
+    googleTerms,
   })
   const stats = summarise(recs)
 

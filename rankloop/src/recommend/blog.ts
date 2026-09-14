@@ -309,9 +309,9 @@ export function recommendBlogPosts(
   input: RecommendInput,
   claimed: ReadonlySet<string> = new Set(),
 ): Recommendation[] {
-  const { client, locations, pages, facts = {}, searchQueries = [], prompts = [] } = input
+  const { client, locations, pages, facts = {}, searchQueries = [], prompts = [], googleTerms = [] } = input
 
-  const topics = keywordTopics({ client, locations, searchQueries, prompts })
+  const topics = keywordTopics({ client, locations, searchQueries, prompts, googleTerms })
   if (topics.length === 0) return []
 
   // Same rule as the pages generator: a page written for the wrong region is
@@ -366,16 +366,26 @@ export function recommendBlogPosts(
       ? cluster.bestPosition !== null && cluster.bestPosition <= 20
         ? 82
         : 78
-      : cluster.keywords.some((k) => k.source === 'question_set')
-        ? 72
-        : 66
+      : cluster.keywords.some((k) => k.source === 'google')
+        ? 75
+        : cluster.keywords.some((k) => k.source === 'question_set')
+          ? 72
+          : 66
+
+    const googleHits = cluster.keywords
+      .filter((k) => k.source === 'google')
+      .reduce((n, k) => n + (k.googleHits ?? 1), 0)
 
     const evidence = cluster.measured
       ? `${cluster.impressions.toLocaleString()} impressions in Search Console across ${cluster.keywords.length} related ` +
         `queries, ${cluster.clicks} clicks` +
         (cluster.bestPosition !== null ? `, best average position ${cluster.bestPosition.toFixed(1)}` : '') +
         '. The demand is measured, not estimated.'
-      : cluster.keywords.some((k) => k.source === 'question_set')
+      : googleHits > 0
+        ? `Google showed people searching this topic ${googleHits} time${googleHits === 1 ? '' : 's'} across our research ` +
+          `searches ("People also ask", its own search suggestions, related searches), and nothing on the site answers it. ` +
+          `Google only suggests what people really search, so the demand is observed rather than guessed.`
+        : cluster.keywords.some((k) => k.source === 'question_set')
         ? `This is one of the questions we put to the AI engines for ${client.name}, and nothing on the site answers it. ` +
           `An engine answering it has to quote somebody, and right now that is a competitor.`
         : `Derived from what the business says it does. Nothing on the site answers it, and it is the kind of question ` +

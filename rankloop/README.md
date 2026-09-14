@@ -46,13 +46,49 @@ A run is the pipeline, in order, stopping at the first failure:
 1. **Read the website** — every page, split into paragraphs and scored.
 2. **Write the question set** — what a real customer would ask, per service and place.
 3. **Ask the AI engines** — needs a browser already signed into each of them. 20–90 minutes.
-4. **Profile the competitors** — crawls every business the engines cited, measured on the same scale.
-5. **Work out what is wrong** — ranked findings.
-6. **Build the fix list** — the exact titles, copy, structured data and pages to publish.
-7. **Generate the client report** — the single HTML document the client receives.
+4. **Research Google** — searches Google from inside the client's towns. 10–20 minutes. See below.
+5. **Profile the competitors** — crawls every business the engines cited, measured on the same scale.
+6. **Work out what is wrong** — ranked findings.
+7. **Build the fix list** — the exact titles, copy, structured data and pages to publish.
+8. **Generate the client report** — the single HTML document the client receives.
 
-*Skip the engines* re-runs everything except step 3 against answers already
+*Skip the engines* re-runs everything except steps 3 and 4 against answers already
 collected. Minutes rather than hours, and no signed-in browser needed.
+
+## Google research (replaces DataForSEO)
+
+`npm run research -- --client=<id>` drives a real browser through Google and
+Maps and reads what the paid API was going to be bought for. No login needed.
+
+| DataForSEO endpoint | Read from |
+|---|---|
+| AI Overview + references | the overview and the links inside it |
+| Local pack with ratings | the map pack block (ads skipped) |
+| Organic top 10 | each result's printed address |
+| People also ask | the block, verbatim |
+| City-level targeting | Google's `uule` parameter, from `locations.dataforseo_location` |
+| Keyword ideas | search-box completions + related searches |
+| CPC / competition | how many "Sponsored" results a search carries |
+| Business Data (reviews) | the Maps listing, reviews sorted newest first |
+
+**Not replaced:** absolute monthly search volume. Completions are shown as
+evidence of demand, never as a number.
+
+What it searches: the business name, `<name> reviews`, `<trade|service> <town>`
+per market, and the customer questions from the question set. Add your own with
+`--ask="question one|question two"`. `--limit=N` (default 16), `--profiles=N`
+Maps listings (default 5, `0` to skip), `--headless`.
+
+Where it goes:
+
+- **Findings** (`analyze`): whether the AI Overview names or links the client and
+  which sites it trusts instead; map-pack and top-10 presence; the brand search;
+  People-also-ask questions the site never answers; searched phrases the site
+  never uses; which searches carry ads; an unclaimed listing; review pace vs rivals.
+- **Blog posts** (`recommend`): PAA questions, completions and related searches join
+  the keyword pool, ranked above the question set and below Search Console.
+- **Review bar**: map packs and listing review counts fill it automatically.
+- **Dashboard**: *Google research*.
 
 ## Publishing fixes
 
@@ -73,7 +109,7 @@ business can confirm, and never invented.
 ## Command line
 
 Every step is also a script. `npm run` : `migrate`, `add-client`, `ingest`,
-`prompts`, `login`, `measure`, `competitors`, `analyze`, `recommend`, `report`,
+`prompts`, `login`, `measure`, `research`, `competitors`, `analyze`, `recommend`, `report`,
 `gsc-auth`, `gsc`. Each takes `--client=<id|domain>`.
 
 `npm run login` is the one thing the console cannot do for you: it opens a

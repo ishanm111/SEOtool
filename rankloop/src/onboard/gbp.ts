@@ -141,7 +141,7 @@ async function resolveProfileUrl(raw: string): Promise<Resolved> {
 }
 
 /** Loose enough for punctuation and suffixes, strict enough to catch a different business. */
-function namesAgree(a: string, b: string): boolean {
+export function namesAgree(a: string, b: string): boolean {
   const norm = (s: string) =>
     s
       .toLowerCase()
@@ -178,7 +178,7 @@ export type ReadOptions = {
 }
 
 /** Whether a website found on a listing belongs to the site being audited. */
-function sameSite(website: string | null, domain: string | undefined): boolean {
+export function sameSite(website: string | null, domain: string | undefined): boolean {
   if (!website || !domain) return false
   try {
     const host = new URL(website).hostname.replace(/^www\./, '')
@@ -200,7 +200,7 @@ const WEEK = [
   'Sunday',
 ] as const
 
-type PanelReading = {
+export type PanelReading = {
   name: string | null
   rating: number | null
   reviewCount: number | null
@@ -254,7 +254,7 @@ function countDays(rows: HourRow[]): number {
  * read a listing identically or the same business would be described
  * differently depending on which link an operator happened to paste.
  */
-async function readPlacePanel(
+export async function readPlacePanel(
   page: import('playwright').Page,
   timeoutMs: number,
 ): Promise<PanelReading> {

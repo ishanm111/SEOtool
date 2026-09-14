@@ -52,6 +52,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
         { href: '/overview', label: 'Overview' },
         { href: '/intake', label: 'Questionnaire' },
         { href: '/prompts', label: 'AI answers' },
+        { href: '/research', label: 'Google research' },
         { href: '/competitors', label: 'Competitors' },
         { href: '/findings', label: 'Findings', badge: card?.criticalFindings || null },
         { href: '/generated', label: 'Recommendations' },

@@ -14,6 +14,7 @@
     "market": "tsx src/scripts/set-market.ts",
     "login": "tsx src/scripts/login.ts",
     "measure": "tsx src/scripts/measure.ts",
+    "research": "tsx src/scripts/research.ts",
     "competitors": "tsx src/scripts/mine-competitors.ts",
     "analyze": "tsx src/scripts/analyze.ts",
     "recommend": "tsx src/scripts/recommend.ts",
