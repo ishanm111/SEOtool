@@ -54,3 +54,4 @@ data-v1-backup.db*
 
 # Snapshots taken before a destructive action. Same client data as above.
 .backup-*/
+!.env.example

@@ -231,6 +231,18 @@ export const recommendations = sqliteTable('recommendations', {
   priority: integer('priority').notNull().default(50),
   /** Count of [[FILL: ...]] markers the client must resolve before publishing. */
   placeholderCount: integer('placeholder_count').notNull().default(0),
+  /**
+   * What the client said about this change in their portal:
+   * pending | approved | rejected.
+   *
+   * Kept apart from fix_applications on purpose. Approval is the client's
+   * decision and survives whether or not the change was ever published;
+   * an application is what the tool did about it afterwards.
+   */
+  clientDecision: text('client_decision').notNull().default('pending'),
+  decidedAt: integer('decided_at', { mode: 'timestamp' }),
+  /** The portal email that decided, so a disputed change has a name on it. */
+  decidedBy: text('decided_by'),
   createdAt: integer('created_at', { mode: 'timestamp' }).$defaultFn(now),
 })
 
@@ -512,4 +524,30 @@ export const clientFacts = sqliteTable('client_facts', {
   key: text('key').notNull(),
   value: text('value').notNull().default(''),
   updatedAt: integer('updated_at', { mode: 'timestamp' }).$defaultFn(now),
+})
+
+
+/**
+ * A client's login to their own portal.
+ *
+ * One row per person, each tied to exactly one client: the portal never shows a
+ * switcher, so there is no way to be signed in and looking at someone else's
+ * numbers. An operator creates these with `npm run portal-invite`; nobody can
+ * sign themselves up.
+ *
+ * The password is stored as a scrypt hash with a per-row salt, never in the
+ * clear, because these are small-business owners who will reuse a password they
+ * use elsewhere.
+ */
+export const portalUsers = sqliteTable('portal_users', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  clientId: integer('client_id').notNull().references(() => clients.id),
+  email: text('email').notNull(),
+  /** scrypt: `<salt-hex>:<key-hex>`. */
+  passwordHash: text('password_hash').notNull(),
+  /** Set when an operator issues a temporary password; forces a change at login. */
+  mustChangePassword: integer('must_change_password').notNull().default(0),
+  disabled: integer('disabled').notNull().default(0),
+  lastLoginAt: integer('last_login_at', { mode: 'timestamp' }),
+  createdAt: integer('created_at', { mode: 'timestamp' }).$defaultFn(now),
 })

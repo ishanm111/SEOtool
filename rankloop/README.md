@@ -106,6 +106,46 @@ Recommendations still carrying a `[[FILL: …]]` marker cannot be published at a
 Those are prices, warranties, response times and credentials — facts only the
 business can confirm, and never invented.
 
+## The client portal
+
+Clients get a sign-in of their own at `/portal`, separate from the operator
+console. They see one business — theirs — and four screens: where they stand,
+what was found, every proposed change, and the full report. There is no client
+switcher and no way to start a run.
+
+The point of it is the approval queue. A client approves or declines each
+proposed change in their own words and their own time, and the decision is
+recorded against the recommendation with their email on it. Nothing is published
+by approving; publishing stays on the operator's **Apply fixes** screen, where
+the site credentials live.
+
+Set a signing key once, then issue a login per client:
+
+```bash
+# .env.local
+PORTAL_SECRET=<64 hex characters>
+
+npm run portal-invite -- --client=5 --email=owner@example.com   # creates, prints a temporary password
+npm run portal-invite -- --client=5 --email=owner@example.com --reset    # new password
+npm run portal-invite -- --client=5 --list                      # who has access
+npm run portal-invite -- --email=owner@example.com --disable    # revoke
+```
+
+The temporary password is printed once and never stored in the clear; the client
+is made to change it at first sign-in. There is no sign-up form anywhere — a
+portal login exists only because an operator made one.
+
+Two properties the code holds to, both worth keeping if this is extended:
+
+- **The client comes from the session, never from the request.** Every portal
+  query takes the client off the signed-in session, and every write names it in
+  the `WHERE` clause, so a tampered form naming another client's row matches
+  nothing.
+- **The portal has its own report route.** The console serves reports from
+  `/api/report?domain=…`, which is right for an operator and would be a hole
+  here. `/portal/report/file` takes no parameters and can only ever serve the
+  signed-in client's own audit.
+
 ## Command line
 
 Every step is also a script. `npm run` : `migrate`, `add-client`, `ingest`,

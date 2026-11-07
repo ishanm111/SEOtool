@@ -8,6 +8,7 @@
     "start": "next start",
     "lint": "eslint",
     "migrate": "tsx src/scripts/migrate.ts",
+    "portal-invite": "tsx src/scripts/portal-invite.ts",
     "add-client": "tsx src/scripts/add-client.ts",
     "ingest": "tsx src/scripts/ingest.ts",
     "prompts": "tsx src/scripts/generate-prompts.ts",
