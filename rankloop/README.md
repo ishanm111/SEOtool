@@ -182,6 +182,42 @@ than making a second form, because two live forms for one business means two
 sets of answers and no way to say which is current. **Replace it** is the
 explicit way to start over.
 
+## Auditing how a site looks, not just what it says
+
+```bash
+npm run presentation -- --client=5
+```
+
+Drives a real browser at phone width (390px) over the pages already ingested
+and measures the things that only exist after CSS has applied: Core Web Vitals,
+tap-target sizes, type sizes, computed colour contrast, heading order, link
+wording, form fields.
+
+**No engine ranks a button because it is a nicer colour.** What this measures is
+the subset of presentation that search engines and assistants demonstrably react
+to, and every finding says which of three levers it pulls:
+
+| Lever | Means |
+|---|---|
+| `ranking` | A measured Google signal — Core Web Vitals, mobile usability, readability. |
+| `comprehension` | Changes how an engine or assistant parses the page — headings, alt text, link wording. |
+| `conversion` | Does not affect ranking. Affects whether a visitor acts — form length, a tappable phone number. |
+
+Conversion items are often the most valuable thing on the list. They are just
+not ranking factors, and a tool that blurs the two is one whose numbers stop
+meaning anything.
+
+It runs at phone width because Google indexes the mobile rendering; a desktop
+measurement passes pages that are unusable on the device most local searches
+happen on.
+
+Two things it deliberately will not do. Contrast is not reported when the
+backdrop is an image, a gradient, or anything the DOM walk cannot see — the
+ratio varies pixel by pixel and a guess is the false positive that makes an
+audit worth ignoring. And `analyze` no longer clears these findings, because
+they come from a separate browser pass; each step now deletes only its own
+categories.
+
 ## Command line
 
 Every step is also a script. `npm run` : `migrate`, `add-client`, `ingest`,

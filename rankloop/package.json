@@ -18,6 +18,7 @@
     "research": "tsx src/scripts/research.ts",
     "competitors": "tsx src/scripts/mine-competitors.ts",
     "analyze": "tsx src/scripts/analyze.ts",
+    "presentation": "tsx src/scripts/presentation.ts",
     "recommend": "tsx src/scripts/recommend.ts",
     "report": "tsx src/scripts/report.ts",
     "backfill-aliases": "tsx src/scripts/backfill-aliases.ts",

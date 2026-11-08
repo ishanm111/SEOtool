@@ -5,6 +5,7 @@ import { extractMentions, isAnswer, mentionsClient } from '../analysis/parse'
 import { buildFindings, type MarketRate } from '../analysis/findings'
 import { groupByMarket, marketKeyOf } from '../lib/markets'
 import { buildResearchFindings } from '../analysis/research'
+import { PRESENTATION_CATEGORIES } from '../analysis/presentation'
 import { JUNK_CITATION_DOMAINS } from '../config'
 
 const SEVERITY_RANK = { critical: 0, high: 1, medium: 2, low: 3 } as const
@@ -190,7 +191,20 @@ function main() {
   }
 
   // Rebuild the fix list for this client only.
-  db.delete(schema.findings).where(eq(schema.findings.clientId, client.id)).run()
+  // Everything except the presentation pass's own categories. That pass needs
+  // a real browser and runs separately, so a blanket delete here would wipe its
+  // findings every time analyze ran and leave no trace of why.
+  const ownFindings = db
+    .select({ id: schema.findings.id, category: schema.findings.category })
+    .from(schema.findings)
+    .where(eq(schema.findings.clientId, client.id))
+    .all()
+    .filter((f) => !(PRESENTATION_CATEGORIES as readonly string[]).includes(f.category))
+    .map((f) => f.id)
+
+  if (ownFindings.length > 0) {
+    db.delete(schema.findings).where(inArray(schema.findings.id, ownFindings)).run()
+  }
 
   const competitors = db
     .select()
