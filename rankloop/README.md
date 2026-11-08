@@ -146,6 +146,42 @@ Two properties the code holds to, both worth keeping if this is extended:
   here. `/portal/report/file` takes no parameters and can only ever serve the
   signed-in client's own audit.
 
+## Sending the questionnaire to the client
+
+The questionnaire is the slowest part of onboarding: the answers are the only
+thing between a list of blocked recommendations and a publishable one, and they
+live in a conversation that has to be had. **Make into Google Form** on the
+questionnaire screen turns the unanswered questions into a form the business can
+fill in on their phone, and hands back a link to send them.
+
+```bash
+npm run forms-auth                      # one-time Google authorisation
+npm run forms-preview -- --client=7     # read the form without creating one
+```
+
+`forms-auth` needs an OAuth client (type: Desktop app) with the **Google Forms
+API** and **Google Drive API** enabled, as `GOOGLE_CLIENT_ID` /
+`GOOGLE_CLIENT_SECRET` in `.env.local`. The Search Console client works if you
+already made one — same project, same client. The Drive scope is `drive.file`,
+which can only touch files this tool itself created.
+
+Three things differ from the console's version of the same questions:
+
+- **Answered questions are left out.** The Forms API cannot seed an answer, so
+  including them would mean the client retyping what you already know — and a
+  blank reply would be indistinguishable from "it changed".
+- **`resolves` is dropped.** "Unblocks 8 recommendations" is what makes an
+  operator bother to ask; to the business it is noise about someone else's tool.
+- **Operator wording is rewritten.** "What do they most want to be found for?"
+  is the right question and the wrong pronoun when the person reading it is the
+  "they". The keys and answer types are untouched, so a form answer and an
+  operator-typed answer are interchangeable.
+
+One form per client. Pressing the button again returns the existing link rather
+than making a second form, because two live forms for one business means two
+sets of answers and no way to say which is current. **Replace it** is the
+explicit way to start over.
+
 ## Command line
 
 Every step is also a script. `npm run` : `migrate`, `add-client`, `ingest`,

@@ -22,6 +22,8 @@
     "report": "tsx src/scripts/report.ts",
     "backfill-aliases": "tsx src/scripts/backfill-aliases.ts",
     "gsc-auth": "tsx src/scripts/search-console-auth.ts",
+    "forms-auth": "tsx src/scripts/forms-auth.ts",
+    "forms-preview": "tsx src/scripts/forms-preview.ts",
     "gsc": "tsx src/scripts/fetch-search-console.ts"
   },
   "dependencies": {

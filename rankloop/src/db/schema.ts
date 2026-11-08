@@ -43,6 +43,18 @@ export const clients = sqliteTable('clients', {
    */
   wrongGeoTerms: text('wrong_geo_terms').notNull().default('[]'),
 
+  /**
+   * The Google Form built from this client's questionnaire, if one was made.
+   *
+   * Stored rather than regenerated because the link is the deliverable: it goes
+   * out by text message and email, and a second press of the button that handed
+   * back a different URL would quietly orphan the one the client is filling in.
+   */
+  questionnaireFormId: text('questionnaire_form_id'),
+  questionnaireFormUrl: text('questionnaire_form_url'),
+  questionnaireFormEditUrl: text('questionnaire_form_edit_url'),
+  questionnaireFormAt: integer('questionnaire_form_at', { mode: 'timestamp' }),
+
   isActive: integer('is_active', { mode: 'boolean' }).notNull().default(true),
   createdAt: integer('created_at', { mode: 'timestamp' }).$defaultFn(now),
 })
