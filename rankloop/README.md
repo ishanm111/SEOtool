@@ -39,6 +39,27 @@ The Google listing's review count is often withheld from an automated read. When
 that happens the field is left empty and says so, rather than being filled with a
 guess that would flow straight into the competitive comparison.
 
+## Fixing the two links afterwards
+
+Everything the tool knows about a business is derived from two things: the
+website address and the Google listing. Both are entered once when a client is
+added, and both are easy to get wrong — a typo, or a listing nobody could find
+that week.
+
+**Edit links** on a client's Overview changes them, and **Inspect the business
+again** re-reads the site with the corrected address. The new-client flow cannot
+do this: it refuses any domain already on file, which is right when adding one
+and exactly wrong when fixing the thing that was added.
+
+Re-inspecting overwrites what was *read* — platform, API base, phone numbers,
+offerings, and every Google listing figure. It leaves the name, the aliases, the
+service-area towns and the business type alone. Those four are what an operator
+corrects by hand when detection gets them wrong, and silently reverting someone's
+corrections is a worse failure than leaving a stale reading for them to notice.
+
+Measurements are untouched either way. Re-run `ingest` to pick up pages from a
+corrected address.
+
 ## Runs
 
 A run is the pipeline, in order, stopping at the first failure:
