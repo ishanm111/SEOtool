@@ -13,9 +13,24 @@ const KIND_LABEL: Record<string, string> = {
   meta_title: 'Page title',
   meta_description: 'Meta description',
   schema: 'Structured data',
+  image_alt: 'Alt text',
+  link_text: 'Link wording',
+  heading: 'Page heading',
+  viewport: 'Mobile viewport',
 }
 
-const KIND_ORDER = ['new_page', 'blog_post', 'copy', 'meta_title', 'meta_description', 'schema']
+const KIND_ORDER = [
+  'new_page',
+  'blog_post',
+  'copy',
+  'meta_title',
+  'meta_description',
+  'schema',
+  'viewport',
+  'heading',
+  'link_text',
+  'image_alt',
+]
 
 function Placeholders({ text }: { text: string }) {
   // Highlight every [[FILL: …]] so what still needs a human is impossible to miss.
@@ -51,8 +66,8 @@ export default async function RecommendationsPage({
       <div>
         <h1 className="display text-3xl">Recommendations</h1>
         <p className="mt-1 text-sm text-ink-3">
-          What to change, ranked by measured impact. Copy, metadata, structured data and pages that do
-          not exist yet — never design.
+          What to change, ranked by measured impact. Copy, metadata, structured data, the markup a
+          crawler reads a page through, and pages that do not exist yet — never design.
         </p>
       </div>
 

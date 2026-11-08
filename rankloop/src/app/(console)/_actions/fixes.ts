@@ -162,6 +162,7 @@ export async function applyFixAction(_prev: FixState, formData: FormData): Promi
     field: rec.kind as EditableField,
     currentValue: rec.currentValue,
     proposedValue: rec.proposedValue,
+    locator: rec.locator,
   }
 
   const refusal = editor.refuse(request)
@@ -185,6 +186,7 @@ export async function applyFixAction(_prev: FixState, formData: FormData): Promi
       pageId: page.id,
       targetUrl: page.url,
       field: rec.kind,
+      locator: rec.locator,
       previousValue: result.previousValue,
       appliedValue: rec.proposedValue,
       status: result.ok ? 'applied' : 'failed',
@@ -240,6 +242,9 @@ export async function revertFixAction(_prev: FixState, formData: FormData): Prom
     field: application.field as EditableField,
     currentValue: application.appliedValue,
     proposedValue: application.previousValue,
+    // The image or link it touched, or the revert would know the page and the
+    // value but not which of its images or links to put the value back on.
+    locator: application.locator,
   })
 
   if (!result.ok) return { error: result.error, notice: null }

@@ -234,9 +234,22 @@ export const recommendations = sqliteTable('recommendations', {
   clientId: integer('client_id').notNull().references(() => clients.id),
   /** Null when the recommendation is a brand-new page rather than an edit. */
   pageId: integer('page_id').references(() => pages.id),
-  /** meta_title | meta_description | copy | schema | new_page | blog_post */
+  /**
+   * meta_title | meta_description | copy | schema | new_page | blog_post |
+   * image_alt | link_text | heading | viewport
+   *
+   * The last four come from the presentation audit rather than from the stored
+   * HTML, and are the only four of its thirteen checks with one correct edit
+   * behind them.
+   */
   kind: text('kind').notNull(),
   target: text('target').notNull().default(''),
+  /**
+   * Which one thing on the page is being changed, when naming the page is not
+   * enough: the image's src, or the link's href, exactly as the markup writes
+   * it. Null for every kind whose target is the page itself.
+   */
+  locator: text('locator'),
   currentValue: text('current_value'),
   proposedValue: text('proposed_value').notNull(),
   reason: text('reason').notNull().default(''),
@@ -466,6 +479,12 @@ export const fixApplications = sqliteTable('fix_applications', {
   pageId: integer('page_id'),
   targetUrl: text('target_url').notNull().default(''),
   field: text('field').notNull().default(''),
+  /**
+   * The image or link this touched, carried over from the recommendation so the
+   * change can be put back. Without it a revert would know the page and the
+   * value but not which of its images or links the value belongs to.
+   */
+  locator: text('locator'),
   previousValue: text('previous_value'),
   appliedValue: text('applied_value').notNull().default(''),
   /** applied | reverted | failed */

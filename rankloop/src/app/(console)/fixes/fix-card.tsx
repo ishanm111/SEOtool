@@ -22,6 +22,10 @@ const KIND_LABEL: Record<string, string> = {
   schema: 'Structured data',
   new_page: 'New page',
   blog_post: 'Blog post',
+  image_alt: 'Alt text',
+  link_text: 'Link wording',
+  heading: 'Page heading',
+  viewport: 'Mobile viewport',
 }
 
 function ApplyButton({ label }: { label: string }) {

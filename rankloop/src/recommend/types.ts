@@ -2,12 +2,29 @@ import type { Client, ClientLocation } from '../lib/client'
 import type { ClientFacts } from '../onboard/questionnaire'
 
 /**
- * A single change to make. Never design — copy, metadata, structured data, or a
- * whole page that does not exist yet.
+ * A single change to make. Never design — copy, metadata, structured data, the
+ * markup a machine reads a page through, or a whole page that does not exist
+ * yet.
+ *
+ * `image_alt`, `link_text`, `heading` and `viewport` come from the presentation
+ * audit rather than from stored HTML, and are built in ./presentation.ts. They
+ * are still not design: an alt attribute, a link's wording, which heading is the
+ * h1 and whether a phone is told the page's width are all things a crawler
+ * reads. How a page looks remains advice on the Findings screen.
  */
 export type Recommendation = {
   pageId: number | null
-  kind: 'meta_title' | 'meta_description' | 'copy' | 'schema' | 'new_page' | 'blog_post'
+  kind:
+    | 'meta_title'
+    | 'meta_description'
+    | 'copy'
+    | 'schema'
+    | 'new_page'
+    | 'blog_post'
+    | 'image_alt'
+    | 'link_text'
+    | 'heading'
+    | 'viewport'
   /** What this touches, in human terms: a URL, or a page that should exist. */
   target: string
   currentValue: string | null
@@ -15,6 +32,12 @@ export type Recommendation = {
   reason: string
   /** 0-100, higher first. Ranked by measured impact, not by ease. */
   priority: number
+  /**
+   * Which one thing on the page is being changed, when naming the page is not
+   * enough: the image's src, or the link's href, exactly as the markup writes
+   * it. Null for a change that has only one possible target.
+   */
+  locator?: string | null
 }
 
 export type PageRow = {

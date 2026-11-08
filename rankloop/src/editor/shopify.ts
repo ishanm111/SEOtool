@@ -6,6 +6,7 @@ import type {
   StoredCredential,
 } from './types'
 import { replaceOnce } from './types'
+import { editMarkup, markupHolds } from './markup'
 
 /**
  * Publishes changes through the Shopify Admin API using a custom app's access
@@ -117,6 +118,9 @@ export function shopifyEditor(cred: StoredCredential): SiteEditor {
       if (request.field === 'copy' && !request.currentValue) {
         return 'There is no original wording recorded, so there is nothing to replace.'
       }
+      if ((request.field === 'image_alt' || request.field === 'link_text') && !request.locator) {
+        return 'This change does not record which image or link it belongs to. Re-run the presentation step.'
+      }
       return null
     },
 
@@ -155,6 +159,48 @@ export function shopifyEditor(cred: StoredCredential): SiteEditor {
               ok: false,
               previousValue: html,
               error: 'Shopify accepted the change but the new wording is not on the product afterwards.',
+            }
+      }
+
+      /**
+       * The same edit as a copy one, to one located thing in the description
+       * rather than to a block of prose. A product's own images are a separate
+       * resource in Shopify with their own alt field; what is edited here is an
+       * <img> somebody put inside the description, which is where the audit
+       * found it.
+       */
+      if (request.field === 'image_alt' || request.field === 'link_text') {
+        const html = product.body_html ?? ''
+        const edited = editMarkup(request, html)
+        if ('error' in edited) return { ok: false, previousValue: null, error: edited.error }
+
+        const put = await call(`/products/${id}.json`, {
+          method: 'PUT',
+          body: JSON.stringify({ product: { id: Number(id), body_html: edited.html } }),
+        })
+        if (!put.ok) {
+          return {
+            ok: false,
+            previousValue: edited.previous,
+            error: `Shopify refused the change: HTTP ${put.status}.`,
+          }
+        }
+
+        const after = await readProduct(id)
+        return markupHolds(request, after?.body_html ?? '')
+          ? {
+              ok: true,
+              previousValue: edited.previous,
+              detail:
+                request.field === 'image_alt'
+                  ? 'The alt text was written and read back correctly.'
+                  : 'The link wording was changed and read back correctly.',
+            }
+          : {
+              ok: false,
+              previousValue: edited.previous,
+              error:
+                'Shopify accepted the change but the product does not hold it afterwards.',
             }
       }
 

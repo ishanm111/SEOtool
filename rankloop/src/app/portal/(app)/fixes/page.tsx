@@ -13,6 +13,10 @@ const KIND_LABEL: Record<string, string> = {
   schema: 'Structured data',
   new_page: 'A page you do not have',
   blog_post: 'A post to publish',
+  image_alt: 'A description for a picture',
+  link_text: 'The words in a link',
+  heading: 'The main heading on a page',
+  viewport: 'A tag that tells phones the width',
 }
 
 /**

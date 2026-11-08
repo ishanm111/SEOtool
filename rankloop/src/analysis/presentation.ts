@@ -37,6 +37,26 @@ export const LEVER_NOTE: Record<Lever, string> = {
   conversion: 'Does not affect ranking. Affects whether a visitor acts.',
 }
 
+/**
+ * One image with no alt text, together with the wording already around it.
+ *
+ * Collected so a replacement can be *quoted* rather than invented. Nothing here
+ * is a description of the picture — it is the text the site itself already puts
+ * next to it, ranked by how tightly it is bound to that image, and a proposal
+ * that cannot be built from one of these is emitted as a gap for the business
+ * to fill rather than as a guess.
+ */
+export type AltlessImage = {
+  /** The src exactly as the markup writes it, which is how the edit finds it. */
+  rawSrc: string
+  /** The same src resolved, so an operator can see which image is meant. */
+  src: string
+  /** A <figcaption>, or the img's own title attribute. Describes the image. */
+  caption: string
+  /** The link's wording, when the image is the whole of a link. */
+  linkText: string
+}
+
 /** Everything measured in the browser for one page. */
 export type PageVitals = {
   url: string
@@ -58,6 +78,20 @@ export type PageVitals = {
   smallTapTargets: { text: string; width: number; height: number }[]
   /** Link and button wording that names no destination. */
   vagueActions: string[]
+  /**
+   * The vague wording that belongs to a link with somewhere to go.
+   *
+   * Kept apart from `vagueActions`, which also counts buttons. A button's
+   * wording cannot be rewritten from the page: nothing on the page says where
+   * it leads. A link's can, because the destination is in the href.
+   */
+  vagueLinks: { text: string; rawHref: string; href: string }[]
+  /** Images with no alt text, with whatever wording sits next to each. */
+  altless: AltlessImage[]
+  /** The page's own <title> — wording already on the page, usable as an h1. */
+  documentTitle: string
+  /** The first subheading, the other place an <h1> can be taken from. */
+  firstH2: string
   /** Body text whose contrast against its own background is under 4.5:1. */
   lowContrast: {
     text: string
@@ -175,6 +209,8 @@ export const COLLECT_SCRIPT = `(() => {
 
   const smallTapTargets = []
   const vagueActions = []
+  const vagueLinks = []
+  const seenLink = new Set()
   for (const el of interactive) {
     if (!visible(el)) continue
     const rect = el.getBoundingClientRect()
@@ -187,8 +223,66 @@ export const COLLECT_SCRIPT = `(() => {
       })
     }
     const plain = text.toLowerCase().replace(/[^a-z ]/g, '').trim()
-    if (plain && VAGUE.includes(plain)) vagueActions.push(text.slice(0, 60))
+    if (plain && VAGUE.includes(plain)) {
+      vagueActions.push(text.slice(0, 60))
+      /**
+       * Only a link with a real destination can have its wording rewritten from
+       * the page. A button, or an anchor pointing at "#", leads nowhere this can
+       * read, so the page says nothing to name it after.
+       */
+      const raw = el.tagName === 'A' ? el.getAttribute('href') || '' : ''
+      const key = raw + '|' + plain
+      if (raw && !/^(#|javascript:)/i.test(raw) && !seenLink.has(key)) {
+        seenLink.add(key)
+        vagueLinks.push({ text: text.slice(0, 60), rawHref: raw, href: el.href })
+      }
+    }
   }
+
+  /**
+   * The file an image really points at.
+   *
+   * A lazy-loaded image carries a placeholder in src and the real file in a
+   * data- attribute, and it is the real one that appears in the stored markup —
+   * so it is the one an edit has to find.
+   */
+  const srcOf = (img) => {
+    const direct = img.getAttribute('src') || ''
+    if (direct && !/^data:/i.test(direct)) return direct
+    for (const attr of ['data-src', 'data-lazy-src', 'data-original', 'data-srcset']) {
+      const value = img.getAttribute(attr)
+      if (value) return value.split(',')[0].trim().split(/\\s+/)[0]
+    }
+    return direct
+  }
+
+  // innerText keeps the line breaks of whatever block the text came out of, and
+  // a caption is one line by the time anybody reads it.
+  const oneLine = (value) => (value || '').replace(/\\s+/g, ' ').trim()
+
+  // Whatever wording the site already puts next to an image with no alt text.
+  // None of it is a description of the picture; it is what there is to quote.
+  const altless = []
+  const seenSrc = new Set()
+  for (const img of images) {
+    if ((img.getAttribute('alt') || '').trim()) continue
+    const rawSrc = srcOf(img)
+    if (!rawSrc || seenSrc.has(rawSrc)) continue
+    seenSrc.add(rawSrc)
+    const figcaption = img.closest('figure')
+      ? img.closest('figure').querySelector('figcaption')
+      : null
+    const link = img.closest('a[href]')
+    altless.push({
+      rawSrc,
+      src: img.currentSrc || img.src || rawSrc,
+      caption: (oneLine(figcaption ? figcaption.innerText : '') ||
+        oneLine(img.getAttribute('title'))).slice(0, 160),
+      linkText: link ? oneLine(link.innerText).slice(0, 160) : '',
+    })
+  }
+
+  const firstH2 = document.querySelector('h2')
 
   // Blocks of real prose only. Running contrast over every node reports the
   // same colour pair dozens of times and buries the one that matters.
@@ -249,6 +343,10 @@ export const COLLECT_SCRIPT = `(() => {
     imagesMissingAlt: images.filter((i) => !(i.getAttribute('alt') || '').trim()).length,
     smallTapTargets: smallTapTargets.slice(0, 12),
     vagueActions: [...new Set(vagueActions)].slice(0, 12),
+    vagueLinks: vagueLinks.slice(0, 10),
+    altless: altless.slice(0, 10),
+    documentTitle: (document.title || '').trim(),
+    firstH2: firstH2 ? (firstH2.innerText || '').trim().slice(0, 120) : '',
     lowContrast: lowContrast.slice(0, 6),
     formFields: fields.length,
     unlabelledFields: unlabelled.length,

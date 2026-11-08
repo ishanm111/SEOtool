@@ -6,6 +6,7 @@ import type {
   StoredCredential,
 } from './types'
 import { replaceOnce } from './types'
+import { editMarkup, markupHolds } from './markup'
 
 /**
  * Publishes changes through the WordPress REST API using an application
@@ -123,6 +124,9 @@ export function wordpressEditor(cred: StoredCredential): SiteEditor {
       if (request.field === 'copy' && !request.currentValue) {
         return 'There is no original wording recorded, so there is nothing to replace.'
       }
+      if ((request.field === 'image_alt' || request.field === 'link_text') && !request.locator) {
+        return 'This change does not record which image or link it belongs to. Re-run the presentation step.'
+      }
       return null
     },
 
@@ -165,6 +169,49 @@ export function wordpressEditor(cred: StoredCredential): SiteEditor {
               previousValue: html,
               error:
                 'WordPress accepted the change but the new wording is not in the page afterwards. A page builder is probably storing the real content elsewhere.',
+            }
+      }
+
+      /**
+       * An alt attribute or a link's wording is a change to the page body, like
+       * a copy edit, but to one located thing inside it rather than to a block
+       * of prose. What was there before is recorded as that one value — the old
+       * alt text, the old link wording — so putting it back is the same edit
+       * run backwards.
+       */
+      if (request.field === 'image_alt' || request.field === 'link_text') {
+        const html = before.content?.raw ?? ''
+        const edited = editMarkup(request, html)
+        if ('error' in edited) return { ok: false, previousValue: null, error: edited.error }
+
+        const put = await call(`/${collection}/${id}`, {
+          method: 'POST',
+          body: JSON.stringify({ content: edited.html }),
+        })
+        if (!put.ok) {
+          return {
+            ok: false,
+            previousValue: edited.previous,
+            error: `WordPress refused the change: HTTP ${put.status}.`,
+          }
+        }
+
+        const after = await readPost(collection, id)
+        return markupHolds(request, after?.content?.raw ?? '')
+          ? {
+              ok: true,
+              previousValue: edited.previous,
+              detail:
+                request.field === 'image_alt'
+                  ? 'The alt text was written and read back correctly.'
+                  : 'The link wording was changed and read back correctly.',
+            }
+          : {
+              ok: false,
+              previousValue: edited.previous,
+              error:
+                'WordPress accepted the change but the page does not hold it afterwards. A page ' +
+                'builder is probably storing the real content somewhere else.',
             }
       }
 
