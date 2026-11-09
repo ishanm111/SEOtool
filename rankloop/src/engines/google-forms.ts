@@ -204,10 +204,17 @@ async function call(url: string, token: string, init?: RequestInit) {
 }
 
 /**
- * Creates a form, fills it in, and shares it so anyone with the link can answer.
+ * Creates a form, fills it in, publishes it, and shares it.
  *
- * Three calls, in this order, because the API requires it: a form can only be
+ * Four calls, in this order, because the API requires it: a form can only be
  * created with a title, so the questions go in afterwards as a batchUpdate.
+ *
+ * The publish step is not optional and is easy to miss. Forms created through
+ * the API used to arrive published; since 30 June 2026 they arrive unpublished
+ * and **silently accept no responses**, so a link handed to a client would look
+ * fine to whoever sent it and be a dead end for whoever opened it. The API also
+ * refuses `isAcceptingResponses` without `isPublished`, so both are set
+ * together.
  *
  * Sharing is the one step allowed to fail without failing the whole thing. A
  * form that exists but is private is recoverable in two clicks; throwing here
@@ -236,6 +243,13 @@ export async function createForm(
         { updateFormInfo: { info: { description }, updateMask: 'description' } },
         ...items.map((item, i) => requestFor(item, i)),
       ],
+    }),
+  })
+
+  await call(`${FORMS_API}/${formId}:setPublishSettings`, token, {
+    method: 'POST',
+    body: JSON.stringify({
+      publishSettings: { publishState: { isPublished: true, isAcceptingResponses: true } },
     }),
   })
 
