@@ -49,3 +49,6 @@ data.db-*
 
 # Editor and launch configuration, specific to one machine.
 .claude/
+
+# Personal drafts that live beside the project, never in it.
+resume-seomyze.tex
