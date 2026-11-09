@@ -122,7 +122,18 @@ const bySeverity = (d: ReportData, sev: Severity) => d.findings.filter((f) => f.
 /** Fixes carrying a value only the business can confirm. */
 const blockedCount = (d: ReportData) => d.fixes.filter((f) => f.placeholderCount > 0).length
 
-const FIX_KINDS = ['meta_title', 'meta_description', 'copy', 'schema', 'new_page', 'blog_post'] as const
+const FIX_KINDS = [
+  'meta_title',
+  'meta_description',
+  'copy',
+  'heading',
+  'link_text',
+  'image_alt',
+  'viewport',
+  'schema',
+  'new_page',
+  'blog_post',
+] as const
 
 const FIX_KIND_LABEL: Record<string, string> = {
   meta_title: 'Page title',
@@ -131,6 +142,10 @@ const FIX_KIND_LABEL: Record<string, string> = {
   schema: 'Business details in the page code',
   new_page: 'A page you do not have yet',
   blog_post: 'A question your site does not answer',
+  heading: 'The heading that says what a page is about',
+  link_text: 'Links that name where they go',
+  image_alt: 'Descriptions for pictures',
+  viewport: 'The tag that tells a phone the page width',
 }
 
 const FIX_KIND_NOTE: Record<string, string> = {
@@ -140,6 +155,10 @@ const FIX_KIND_NOTE: Record<string, string> = {
   schema: 'JSON-LD for the page template, invisible to visitors',
   new_page: 'written in full, ready to publish',
   blog_post: 'a post built around what people actually search for',
+  heading: 'the <h1> a page is missing, taken from wording already on it',
+  link_text: 'named after the page each one points at',
+  image_alt: 'the line a crawler or an assistant reads instead of the picture',
+  viewport: 'one tag in the theme, which fixes every page at once',
 }
 
 /**

@@ -12,7 +12,16 @@
  *     someone's live homepage is not a risk worth taking.
  */
 
-export type EditableField = 'meta_title' | 'meta_description' | 'copy'
+/**
+ * The fields a platform can actually be written to.
+ *
+ * `image_alt` and `link_text` are markup rather than prose, but they are edits
+ * to one attribute and one run of text inside the page body — the same field
+ * the copy edits already write, located precisely. Everything else the
+ * presentation audit finds is a CSS or template decision and is never published
+ * from here; `WHY_NOT_PUBLISHABLE` in ./index.ts says so per kind.
+ */
+export type EditableField = 'meta_title' | 'meta_description' | 'copy' | 'image_alt' | 'link_text'
 
 export type TargetPage = {
   id: number
@@ -30,6 +39,12 @@ export type ApplyRequest = {
   /** The exact text being replaced. Required for a copy edit. */
   currentValue: string | null
   proposedValue: string
+  /**
+   * Which one thing on the page is being changed, when naming the page is not
+   * enough: the image's src for an alt edit, the link's href for a wording one,
+   * exactly as the markup writes it.
+   */
+  locator?: string | null
 }
 
 export type ApplyResult =

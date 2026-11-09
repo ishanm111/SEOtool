@@ -8,6 +8,7 @@
     "start": "next start",
     "lint": "eslint",
     "migrate": "tsx src/scripts/migrate.ts",
+    "portal-invite": "tsx src/scripts/portal-invite.ts",
     "add-client": "tsx src/scripts/add-client.ts",
     "ingest": "tsx src/scripts/ingest.ts",
     "prompts": "tsx src/scripts/generate-prompts.ts",
@@ -17,10 +18,14 @@
     "research": "tsx src/scripts/research.ts",
     "competitors": "tsx src/scripts/mine-competitors.ts",
     "analyze": "tsx src/scripts/analyze.ts",
+    "presentation": "tsx src/scripts/presentation.ts",
     "recommend": "tsx src/scripts/recommend.ts",
     "report": "tsx src/scripts/report.ts",
     "backfill-aliases": "tsx src/scripts/backfill-aliases.ts",
     "gsc-auth": "tsx src/scripts/search-console-auth.ts",
+    "forms-auth": "tsx src/scripts/forms-auth.ts",
+    "forms-preview": "tsx src/scripts/forms-preview.ts",
+    "questionnaire-text": "tsx src/scripts/questionnaire-text.ts",
     "gsc": "tsx src/scripts/fetch-search-console.ts"
   },
   "dependencies": {

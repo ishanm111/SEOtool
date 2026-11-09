@@ -27,6 +27,10 @@ const KIND_LABEL: Record<string, string> = {
   schema: 'Structured data (JSON-LD)',
   new_page: 'New page',
   blog_post: 'New blog post',
+  image_alt: 'Alt text for an image',
+  link_text: 'The wording of a link',
+  heading: 'The page heading',
+  viewport: 'The mobile viewport tag',
 }
 
 /** What a person has to do with each kind, since none of these are published from here. */
@@ -38,9 +42,28 @@ const KIND_HOW: Record<string, string> = {
   new_page: 'Create the page at the slug given, paste the body, and link it from the navigation.',
   blog_post:
     'Publish as a post at the slug given. Fill in every highlighted gap first — a post is the easiest place to publish a number nobody checked. Link it from the service or collection page it is about.',
+  image_alt:
+    'Find the image named above and put the new value in its alt attribute. Read it once first: it was quoted from the page or from the file name, and only somebody who can see the picture knows whether it describes it.',
+  link_text:
+    'Find the link to the address named above and replace the words inside it, leaving the href alone.',
+  heading:
+    'Make this the page’s one <h1>. On most sites that means renaming the page itself, since the theme renders the page title as the h1.',
+  viewport:
+    'Put the tag in the <head> of the site’s theme, once. It fixes every page at the same time.',
 }
 
-const ORDER = ['meta_title', 'meta_description', 'copy', 'schema', 'new_page', 'blog_post']
+const ORDER = [
+  'meta_title',
+  'meta_description',
+  'copy',
+  'heading',
+  'link_text',
+  'image_alt',
+  'viewport',
+  'schema',
+  'new_page',
+  'blog_post',
+]
 
 function fixBlock(fix: ReportFix, index: number): string {
   return `

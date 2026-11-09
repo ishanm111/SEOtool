@@ -113,7 +113,13 @@ export function ClientCard({ card: c }: { card: CardData }) {
 
         <div className="flex flex-wrap items-center gap-2">
           {c.activeRun && <RunControls runId={c.activeRun.id} status={c.activeRun.status} />}
-          <SwitchToClient clientId={c.client.id} />
+          {/*
+            Goes somewhere. Switching on its own only rewrites the sidebar, and
+            a button labelled "Open" that leaves you on the page you pressed it
+            from reads as broken — doubly so for a client with no run yet, whose
+            card looks identical before and after.
+          */}
+          <SwitchToClient clientId={c.client.id} to="/overview" />
           <StartRun
             clientId={c.client.id}
             clientName={c.client.name}

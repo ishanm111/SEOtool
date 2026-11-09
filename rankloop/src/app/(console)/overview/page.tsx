@@ -4,6 +4,7 @@ import { NoClient } from '../_components/no-client'
 import { activeClient } from '@/lib/active-client'
 import { PageHeader, Stat } from '../_components/ui'
 import { StartRun } from '../_components/start-run'
+import { BusinessLinks } from './business-links'
 
 export const dynamic = 'force-dynamic'
 
@@ -34,6 +35,13 @@ export default async function Home() {
             <StartRun clientId={client.id} clientName={client.name} />
           </>
         }
+      />
+
+      <BusinessLinks
+        clientId={client.id}
+        homepageUrl={client.homepageUrl}
+        gbpUrl={client.gbpUrl ?? null}
+        hasRun={o.totalAnswers > 0}
       />
 
       {o.wrongGeoPages > 0 && (

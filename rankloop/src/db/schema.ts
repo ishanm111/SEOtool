@@ -43,6 +43,18 @@ export const clients = sqliteTable('clients', {
    */
   wrongGeoTerms: text('wrong_geo_terms').notNull().default('[]'),
 
+  /**
+   * The Google Form built from this client's questionnaire, if one was made.
+   *
+   * Stored rather than regenerated because the link is the deliverable: it goes
+   * out by text message and email, and a second press of the button that handed
+   * back a different URL would quietly orphan the one the client is filling in.
+   */
+  questionnaireFormId: text('questionnaire_form_id'),
+  questionnaireFormUrl: text('questionnaire_form_url'),
+  questionnaireFormEditUrl: text('questionnaire_form_edit_url'),
+  questionnaireFormAt: integer('questionnaire_form_at', { mode: 'timestamp' }),
+
   isActive: integer('is_active', { mode: 'boolean' }).notNull().default(true),
   createdAt: integer('created_at', { mode: 'timestamp' }).$defaultFn(now),
 })
@@ -222,15 +234,40 @@ export const recommendations = sqliteTable('recommendations', {
   clientId: integer('client_id').notNull().references(() => clients.id),
   /** Null when the recommendation is a brand-new page rather than an edit. */
   pageId: integer('page_id').references(() => pages.id),
-  /** meta_title | meta_description | copy | schema | new_page | blog_post */
+  /**
+   * meta_title | meta_description | copy | schema | new_page | blog_post |
+   * image_alt | link_text | heading | viewport
+   *
+   * The last four come from the presentation audit rather than from the stored
+   * HTML, and are the only four of its thirteen checks with one correct edit
+   * behind them.
+   */
   kind: text('kind').notNull(),
   target: text('target').notNull().default(''),
+  /**
+   * Which one thing on the page is being changed, when naming the page is not
+   * enough: the image's src, or the link's href, exactly as the markup writes
+   * it. Null for every kind whose target is the page itself.
+   */
+  locator: text('locator'),
   currentValue: text('current_value'),
   proposedValue: text('proposed_value').notNull(),
   reason: text('reason').notNull().default(''),
   priority: integer('priority').notNull().default(50),
   /** Count of [[FILL: ...]] markers the client must resolve before publishing. */
   placeholderCount: integer('placeholder_count').notNull().default(0),
+  /**
+   * What the client said about this change in their portal:
+   * pending | approved | rejected.
+   *
+   * Kept apart from fix_applications on purpose. Approval is the client's
+   * decision and survives whether or not the change was ever published;
+   * an application is what the tool did about it afterwards.
+   */
+  clientDecision: text('client_decision').notNull().default('pending'),
+  decidedAt: integer('decided_at', { mode: 'timestamp' }),
+  /** The portal email that decided, so a disputed change has a name on it. */
+  decidedBy: text('decided_by'),
   createdAt: integer('created_at', { mode: 'timestamp' }).$defaultFn(now),
 })
 
@@ -442,6 +479,12 @@ export const fixApplications = sqliteTable('fix_applications', {
   pageId: integer('page_id'),
   targetUrl: text('target_url').notNull().default(''),
   field: text('field').notNull().default(''),
+  /**
+   * The image or link this touched, carried over from the recommendation so the
+   * change can be put back. Without it a revert would know the page and the
+   * value but not which of its images or links the value belongs to.
+   */
+  locator: text('locator'),
   previousValue: text('previous_value'),
   appliedValue: text('applied_value').notNull().default(''),
   /** applied | reverted | failed */
@@ -512,4 +555,30 @@ export const clientFacts = sqliteTable('client_facts', {
   key: text('key').notNull(),
   value: text('value').notNull().default(''),
   updatedAt: integer('updated_at', { mode: 'timestamp' }).$defaultFn(now),
+})
+
+
+/**
+ * A client's login to their own portal.
+ *
+ * One row per person, each tied to exactly one client: the portal never shows a
+ * switcher, so there is no way to be signed in and looking at someone else's
+ * numbers. An operator creates these with `npm run portal-invite`; nobody can
+ * sign themselves up.
+ *
+ * The password is stored as a scrypt hash with a per-row salt, never in the
+ * clear, because these are small-business owners who will reuse a password they
+ * use elsewhere.
+ */
+export const portalUsers = sqliteTable('portal_users', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  clientId: integer('client_id').notNull().references(() => clients.id),
+  email: text('email').notNull(),
+  /** scrypt: `<salt-hex>:<key-hex>`. */
+  passwordHash: text('password_hash').notNull(),
+  /** Set when an operator issues a temporary password; forces a change at login. */
+  mustChangePassword: integer('must_change_password').notNull().default(0),
+  disabled: integer('disabled').notNull().default(0),
+  lastLoginAt: integer('last_login_at', { mode: 'timestamp' }),
+  createdAt: integer('created_at', { mode: 'timestamp' }).$defaultFn(now),
 })

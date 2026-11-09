@@ -18,8 +18,24 @@ export function editorFor(cred: StoredCredential): SiteEditor | null {
   return null
 }
 
-/** Which recommendation kinds can be published, and why the others cannot. */
-export const PUBLISHABLE_KINDS = new Set(['meta_title', 'meta_description', 'copy'])
+/**
+ * Which recommendation kinds can be published, and why the others cannot.
+ *
+ * A kind belongs here only when both editors can write it and read it back. The
+ * presentation audit produces four kinds; two of them are an attribute and a run
+ * of text inside the page body, which is a field both platforms already expose,
+ * and two of them live in the theme — so those two are listed below with what to
+ * do about them instead. A kind added here that an editor cannot actually write
+ * would show an operator a working button that ticks a fix off a list without
+ * ever reaching the website.
+ */
+export const PUBLISHABLE_KINDS = new Set([
+  'meta_title',
+  'meta_description',
+  'copy',
+  'image_alt',
+  'link_text',
+])
 
 export const WHY_NOT_PUBLISHABLE: Record<string, string> = {
   schema:
@@ -28,4 +44,8 @@ export const WHY_NOT_PUBLISHABLE: Record<string, string> = {
     'A page that does not exist yet has to be created and placed in the navigation by a person. The copy below is ready to paste.',
   blog_post:
     'A post that does not exist yet has to be created, dated and published by a person. The body below is ready to paste, and every highlighted gap has to be filled in first.',
+  heading:
+    'On almost every site the page’s own title is what the theme renders as the <h1>, so this is fixed in the template or by renaming the page — not by editing the body. Use the heading below.',
+  viewport:
+    'The viewport tag sits in the <head> of the site’s theme, not in any page’s fields, so it is changed once in the theme and fixes every page at once. Paste the tag below.',
 }

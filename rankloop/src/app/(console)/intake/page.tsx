@@ -8,6 +8,10 @@ import { BUSINESS_TYPE_LABELS } from '@/config'
 import { NoClient } from '../_components/no-client'
 import { PageHeader, Stat } from '../_components/ui'
 import { IntakeForm } from './form'
+import { GoogleFormPanel } from './google-form'
+import { ImportAnswersPanel } from './import-answers'
+import { formsConfigured } from '@/engines/google-forms'
+import { formQuestionCount } from '@/onboard/questionnaire-form'
 
 export const dynamic = 'force-dynamic'
 
@@ -37,6 +41,31 @@ export default async function IntakePage() {
     .where(eq(schema.recommendations.clientId, client.id))
     .all()
     .filter((r) => r.placeholderCount > 0).length
+
+  // Read on the server so the panel can say why the button is missing rather
+  // than offering one that fails on press.
+  const forms = formsConfigured()
+  const formCount = formQuestionCount(client, facts)
+  // Straight off the row rather than through `Client`, which is the hydrated
+  // domain type the pipeline passes around: a link to a Google Form is console
+  // bookkeeping and has no business in it.
+  const formRow = db
+    .select({
+      url: schema.clients.questionnaireFormUrl,
+      editUrl: schema.clients.questionnaireFormEditUrl,
+      madeAt: schema.clients.questionnaireFormAt,
+    })
+    .from(schema.clients)
+    .where(eq(schema.clients.id, client.id))
+    .get()
+
+  const existingForm = formRow?.url
+    ? {
+        url: formRow.url,
+        editUrl: formRow.editUrl ?? null,
+        madeAt: formRow.madeAt ? formRow.madeAt.toLocaleDateString() : null,
+      }
+    : null
 
   return (
     <div className="space-y-8">
@@ -83,6 +112,17 @@ export default async function IntakePage() {
       )}
 
       <IntakeForm clientId={client.id} groups={groups} answers={facts} />
+
+      <GoogleFormPanel
+        clientId={client.id}
+        clientName={client.name}
+        questionCount={formCount}
+        existing={existingForm}
+        configured={forms.ok}
+        configuredReason={forms.reason}
+      />
+
+      <ImportAnswersPanel clientId={client.id} />
 
       <p className="text-sm text-ink-3">
         {QUESTIONNAIRE.reduce((n, g) => n + g.questions.length, 0)} questions exist in total; the

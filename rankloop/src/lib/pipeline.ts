@@ -18,6 +18,7 @@ export type StepKey =
   | 'research'
   | 'competitors'
   | 'analyze'
+  | 'presentation'
   | 'recommend'
   | 'report'
 
@@ -30,9 +31,12 @@ export type StepDef = {
   /** Roughly how long, so a run that takes an hour never looks like a hang. */
   duration: string
   /**
-   * Drives a real browser against the consumer chat apps, so it needs a signed-in
-   * profile and cannot be hurried. Flagged because it is the one step that can
-   * fail for a reason outside the tool.
+   * Drives a real browser against the consumer chat apps, so it needs the one
+   * signed-in profile and has to take its turn. Flagged because these are the
+   * steps that can fail for a reason outside the tool.
+   *
+   * Not every step that opens a browser belongs here — see the presentation
+   * step, which launches a throwaway Chromium of its own and so needs no turn.
    */
   usesBrowser?: boolean
 }
@@ -83,6 +87,24 @@ export const PIPELINE: StepDef[] = [
     script: 'src/scripts/analyze.ts',
     duration: 'seconds',
   },
+  /**
+   * After `analyze` because it is the second half of the same question, and
+   * before `recommend` only for how the log reads — the two write different
+   * kinds into the same table and neither depends on the other.
+   *
+   * No `usesBrowser`. It does launch Chromium, but a fresh headless one with no
+   * profile, so two of these can run at once and neither clashes with a
+   * measurement run. Claiming the browser gate would make a client's audit wait
+   * out another client's forty minutes of questions for nothing.
+   */
+  {
+    key: 'presentation',
+    label: 'Audit how the pages are built',
+    description:
+      'Loads every page in a phone-sized browser and measures what the copy sits in: mobile layout, Core Web Vitals, headings, alt text, link wording, contrast and tap targets.',
+    script: 'src/scripts/presentation.ts',
+    duration: '1–4 minutes',
+  },
   {
     key: 'recommend',
     label: 'Build the fix list',
@@ -111,7 +133,14 @@ export const ALL_STEP_KEYS = PIPELINE.map((s) => s.key)
  * which is what an operator wants after editing a client's service area or
  * re-crawling their site.
  */
-export const DESK_STEP_KEYS: StepKey[] = ['ingest', 'competitors', 'analyze', 'recommend', 'report']
+export const DESK_STEP_KEYS: StepKey[] = [
+  'ingest',
+  'competitors',
+  'analyze',
+  'presentation',
+  'recommend',
+  'report',
+]
 
 /**
  * `paused` is a run that is still alive and holding what it holds.

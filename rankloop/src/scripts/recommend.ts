@@ -2,6 +2,7 @@ import { eq, inArray } from 'drizzle-orm'
 import { openDb, schema } from '../db/raw'
 import { resolveClient, clientLocations } from '../lib/resolve-client'
 import { buildRecommendations, countPlaceholders, summarise, type GoogleTermRow } from '../recommend'
+import { PRESENTATION_KINDS } from '../recommend/presentation'
 import { arg } from '../lib/args'
 import { loadFacts } from '../lib/facts'
 import { isNavigational, isOnTopic, topicWords } from '../research/relevance'
@@ -105,7 +106,26 @@ function main() {
   })
   const stats = summarise(recs)
 
-  db.delete(schema.recommendations).where(eq(schema.recommendations.clientId, client.id)).run()
+  /**
+   * Only the kinds this pass builds.
+   *
+   * The presentation audit writes into the same table from a browser run, and
+   * nothing here can rebuild those — they come out of a painted page rather
+   * than out of stored HTML. Clearing the lot would delete them every time the
+   * fix list was rebuilt, which an operator would see as them vanishing for no
+   * reason.
+   */
+  const presentationKinds = PRESENTATION_KINDS as readonly string[]
+  const mine = db
+    .select({ id: schema.recommendations.id, kind: schema.recommendations.kind })
+    .from(schema.recommendations)
+    .where(eq(schema.recommendations.clientId, client.id))
+    .all()
+    .filter((r) => !presentationKinds.includes(r.kind))
+    .map((r) => r.id)
+  if (mine.length > 0) {
+    db.delete(schema.recommendations).where(inArray(schema.recommendations.id, mine)).run()
+  }
   if (recs.length > 0) {
     db.insert(schema.recommendations)
       .values(

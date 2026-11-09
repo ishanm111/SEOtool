@@ -2,7 +2,13 @@ import 'server-only'
 import { desc, eq, inArray } from 'drizzle-orm'
 import { db, schema } from '../db'
 import type { Client } from './client'
-import { PUBLISHABLE_KINDS, WHY_NOT_PUBLISHABLE, editorFor, type StoredCredential } from '../editor'
+import {
+  PUBLISHABLE_KINDS,
+  WHY_NOT_PUBLISHABLE,
+  editorFor,
+  type EditableField,
+  type StoredCredential,
+} from '../editor'
 
 /**
  * What can be published to a client's site, what has been, and what is standing
@@ -24,6 +30,8 @@ export type FixRow = {
   reason: string
   priority: number
   placeholderCount: number
+  /** The image or link this touches, for the kinds that change one of those. */
+  locator: string | null
   pageId: number | null
   pageUrl: string | null
   pageType: string | null
@@ -109,9 +117,10 @@ export function listFixes(client: Client): {
           title: page.title,
           metaDescription: page.metaDescription,
         },
-        field: r.kind as 'meta_title' | 'meta_description' | 'copy',
+        field: r.kind as EditableField,
         currentValue: r.currentValue,
         proposedValue: r.proposedValue,
+        locator: r.locator,
       })
     }
 
@@ -124,6 +133,7 @@ export function listFixes(client: Client): {
       reason: r.reason,
       priority: r.priority,
       placeholderCount: r.placeholderCount,
+      locator: r.locator,
       pageId: r.pageId,
       pageUrl: page?.url ?? null,
       pageType: page?.pageType ?? null,
