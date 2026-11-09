@@ -171,39 +171,12 @@ Two properties the code holds to, both worth keeping if this is extended:
 
 The questionnaire is the slowest part of onboarding: the answers are the only
 thing between a list of blocked recommendations and a publishable one, and they
-live in a conversation that has to be had. There are two ways to hand it to the
-business instead.
-
-### A link the tool hosts itself
-
-**Make a link** on the questionnaire screen issues a URL — `/q/<token>` — that
-opens the questionnaire with no sign-in and no Google account anywhere in it.
-This is the shorter path and the better one:
-
-- **Answers write straight into `client_facts`**, the table the recommender
-  reads. A Google Form puts them in a spreadsheet somebody has to copy back out.
-- **Every box starts with what is already on file**, which the Forms API cannot
-  do. So a business owner can correct the opening hours instead of guessing what
-  you have, and clearing a box unambiguously means "take that off".
-- **Nothing to set up.** No Cloud project, no OAuth client, no refresh token.
-
-The token is the whole of the authorisation — the same trust model as a Google
-Form link — so it is 18 random bytes and unique, never derived from the client
-id. **Replace it** issues a new one and the old link stops resolving in the same
-statement, which is the only thing to be done about a link sent to the wrong
-number. The page is `noindex`, because a crawled one would publish a business's
-answers to anyone who searched.
-
-The one requirement is that the tool be reachable from the client's phone. On a
-laptop it is not, and the panel says so rather than handing over a dead link.
-Put the app behind a tunnel or a real domain and set `PUBLIC_BASE_URL` in
-`.env.local` to that address — the client portal needs exactly the same thing,
-so it is one job and not two.
+live in a conversation that has to be had.
 
 ### A Google Form
 
-**Make into Google Form** turns the unanswered questions into a Google Form and
-hands back a link, if the OAuth setup below has been done.
+**Make into Google Form** turns the questionnaire into a Google Form and hands
+back a link to send the business, if the OAuth setup below has been done.
 
 Without it, build the form by hand instead — it is one form per business type,
 not one per client, so twenty minutes of typing covers every client there will
