@@ -203,8 +203,22 @@ so it is one job and not two.
 ### A Google Form
 
 **Make into Google Form** turns the unanswered questions into a Google Form and
-hands back a link. Worth it only if the business already lives in Google
-Workspace and would rather the answers landed there.
+hands back a link, if the OAuth setup below has been done.
+
+Without it, build the form by hand instead — it is one form per business type,
+not one per client, so twenty minutes of typing covers every client there will
+ever be:
+
+```bash
+npm run questionnaire-text -- --type=local_service
+npm run questionnaire-text -- --type=local_retail
+npm run questionnaire-text -- --type=ecommerce
+```
+
+That prints the questions, their Google Forms answer types and their help text,
+from the same definition the console reads, so a form built from it asks exactly
+what the tool expects back. Answers then have to be copied into the console,
+which is the real cost of the Google route either way.
 
 ```bash
 npm run forms-auth                      # one-time Google authorisation

@@ -25,6 +25,7 @@
     "gsc-auth": "tsx src/scripts/search-console-auth.ts",
     "forms-auth": "tsx src/scripts/forms-auth.ts",
     "forms-preview": "tsx src/scripts/forms-preview.ts",
+    "questionnaire-text": "tsx src/scripts/questionnaire-text.ts",
     "gsc": "tsx src/scripts/fetch-search-console.ts"
   },
   "dependencies": {
