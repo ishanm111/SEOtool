@@ -12,11 +12,15 @@ import { clientQuestionGroups, countQuestions } from './client-questionnaire'
  * this module does is translate those groups into the shapes the Forms API
  * accepts — and drop each question's `resolves`, which says "unblocks 8
  * recommendations" and is noise about someone else's tooling to the business.
+ *
+ * Every question goes in, answered or not. The client is the one who knows
+ * whether what we hold is still true, and an answer that comes back changed is
+ * shown as replacing the old one before anything is written.
  */
 export function formItemsFor(client: Client, facts: ClientFacts): FormItem[] {
   const items: FormItem[] = []
 
-  for (const group of clientQuestionGroups(client.businessType, facts, { skipAnswered: true })) {
+  for (const group of clientQuestionGroups(client.businessType, facts)) {
     items.push({ kind: 'header', title: group.title, description: group.intro })
 
     for (const q of group.questions) {
@@ -48,6 +52,6 @@ export function formDescriptionFor(client: Client): string {
 }
 
 /** How many questions a form would carry, for an interface that says so first. */
-export function pendingQuestionCount(client: Client, facts: ClientFacts): number {
-  return countQuestions(clientQuestionGroups(client.businessType, facts, { skipAnswered: true }))
+export function formQuestionCount(client: Client, facts: ClientFacts): number {
+  return countQuestions(clientQuestionGroups(client.businessType, facts))
 }

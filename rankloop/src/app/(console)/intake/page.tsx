@@ -10,8 +10,9 @@ import { PageHeader, Stat } from '../_components/ui'
 import { IntakeForm } from './form'
 import { GoogleFormPanel } from './google-form'
 import { ShareLinkPanel } from './share-link'
+import { ImportAnswersPanel } from './import-answers'
 import { formsConfigured } from '@/engines/google-forms'
-import { pendingQuestionCount } from '@/onboard/questionnaire-form'
+import { formQuestionCount } from '@/onboard/questionnaire-form'
 import { isLocalOnly, publicBaseUrl, questionnairePath } from '@/onboard/questionnaire-link'
 
 export const dynamic = 'force-dynamic'
@@ -46,7 +47,7 @@ export default async function IntakePage() {
   // Read on the server so the panel can say why the button is missing rather
   // than offering one that fails on press.
   const forms = formsConfigured()
-  const pendingCount = pendingQuestionCount(client, facts)
+  const formCount = formQuestionCount(client, facts)
   // Straight off the row rather than through `Client`, which is the hydrated
   // domain type the pipeline passes around: a link to a Google Form is console
   // bookkeeping and has no business in it.
@@ -120,6 +121,8 @@ export default async function IntakePage() {
         </div>
       )}
 
+      <IntakeForm clientId={client.id} groups={groups} answers={facts} />
+
       <ShareLinkPanel
         clientId={client.id}
         clientName={client.name}
@@ -133,13 +136,13 @@ export default async function IntakePage() {
       <GoogleFormPanel
         clientId={client.id}
         clientName={client.name}
-        pendingCount={pendingCount}
+        questionCount={formCount}
         existing={existingForm}
         configured={forms.ok}
         configuredReason={forms.reason}
       />
 
-      <IntakeForm clientId={client.id} groups={groups} answers={facts} />
+      <ImportAnswersPanel clientId={client.id} />
 
       <p className="text-sm text-ink-3">
         {QUESTIONNAIRE.reduce((n, g) => n + g.questions.length, 0)} questions exist in total; the

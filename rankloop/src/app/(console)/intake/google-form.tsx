@@ -27,14 +27,14 @@ function Submit({ idle, busy }: { idle: string; busy: string }) {
 export function GoogleFormPanel({
   clientId,
   clientName,
-  pendingCount,
+  questionCount,
   existing,
   configured,
   configuredReason,
 }: {
   clientId: number
   clientName: string
-  pendingCount: number
+  questionCount: number
   existing: { url: string; editUrl: string | null; madeAt: string | null } | null
   configured: boolean
   configuredReason?: string
@@ -50,11 +50,11 @@ export function GoogleFormPanel({
           <p className="mt-1 text-sm text-ink-3">
             {existing
               ? `A form for ${clientName} is live. Send them the link; answers land in the form's own responses sheet.`
-              : `Turns the ${pendingCount} unanswered question${pendingCount === 1 ? '' : 's'} above into a Google Form ${clientName} can fill in on their phone.`}
+              : `Turns all ${questionCount} questions above into a Google Form ${clientName} can fill in on their phone. Their answers come back through the box below.`}
           </p>
         </div>
 
-        {!existing && configured && pendingCount > 0 && (
+        {!existing && configured && questionCount > 0 && (
           <form action={action}>
             <input type="hidden" name="clientId" value={clientId} />
             <Submit idle="Make into Google Form" busy="Making the form…" />
@@ -72,9 +72,9 @@ export function GoogleFormPanel({
         </p>
       )}
 
-      {configured && !existing && pendingCount === 0 && (
+      {configured && !existing && questionCount === 0 && (
         <p className="mt-4 text-sm text-ink-3">
-          Every question is already answered, so there is nothing to ask.
+          This business type has no questions, so there is nothing to ask.
         </p>
       )}
 

@@ -1,4 +1,4 @@
-import type { BusinessType } from '../config'
+import { BUSINESS_TYPES, type BusinessType } from '../config'
 import { questionsFor, type ClientFacts, type QuestionKind } from './questionnaire'
 
 /**
@@ -127,29 +127,25 @@ function describe(help: string, mustBeConfirmed?: boolean): string {
 }
 
 /**
- * The groups to put in front of a business.
+ * The groups to put in front of a business — every question, always.
  *
- * `skipAnswered` is for a Google Form and nothing else. The Forms API cannot
- * seed an answer, so a form that included the answered questions would mean a
- * client retyping what the operator already knows — and a blank reply would be
- * indistinguishable from "it changed", which is how a good answer gets
- * overwritten with nothing.
+ * Answered ones used to be left out of a Google Form, because the Forms API
+ * cannot seed an answer and a blank reply would have been indistinguishable
+ * from "it changed". That reasoning died with the paste-back importer: an
+ * answer coming the other way is now shown against what is already on file and
+ * labelled as replacing it, so a client correcting the opening hours the
+ * operator guessed at is a feature rather than a silent loss.
  *
- * The tool's own page has no such limit: it shows every question with what is
- * on file already in the box, so a blank one unambiguously means "take that
- * off", and a business can correct a typo instead of living with it.
+ * The tool's own page goes further and puts the existing answer in the box.
  */
 export function clientQuestionGroups(
   businessType: BusinessType,
   facts: ClientFacts,
-  opts: { skipAnswered?: boolean } = {},
 ): ClientQuestionGroup[] {
   const groups: ClientQuestionGroup[] = []
 
   for (const group of questionsFor(businessType)) {
-    const asked = opts.skipAnswered
-      ? group.questions.filter((q) => !facts[q.key])
-      : group.questions
+    const asked = group.questions
     if (asked.length === 0) continue
 
     const voicedGroup = GROUP_VOICE[group.title]
@@ -182,4 +178,45 @@ export function countQuestions(groups: ClientQuestionGroup[]): number {
 
 export function countAnswered(groups: ClientQuestionGroup[]): number {
   return groups.reduce((n, g) => n + g.questions.filter((q) => q.answer).length, 0)
+}
+
+/**
+ * Every wording a question has ever been shown under, by key.
+ *
+ * A form built by hand carries the client-facing label; one built by an
+ * operator who copied the console carries that one; and a question asked of a
+ * shop and of a plumber can be worded differently again. Matching a pasted
+ * answer back to a key has to recognise all of them, because the alternative is
+ * an operator retyping an answer the tool already has in front of it.
+ */
+export function labelsByKey(): Record<string, string[]> {
+  const out: Record<string, Set<string>> = {}
+  const add = (key: string, label: string) => {
+    if (!label) return
+    ;(out[key] ??= new Set()).add(label)
+  }
+
+  for (const type of BUSINESS_TYPES) {
+    for (const group of questionsFor(type)) {
+      for (const q of group.questions) {
+        add(q.key, q.label)
+        add(q.key, CLIENT_VOICE[q.key]?.label ?? '')
+      }
+    }
+  }
+
+  return Object.fromEntries(Object.entries(out).map(([k, v]) => [k, [...v]]))
+}
+
+/** The choice options a key accepts, for mapping a pasted label back to a value. */
+export function optionsByKey(): Record<string, { value: string; label: string }[]> {
+  const out: Record<string, { value: string; label: string }[]> = {}
+  for (const type of BUSINESS_TYPES) {
+    for (const group of questionsFor(type)) {
+      for (const q of group.questions) {
+        if (q.options) out[q.key] = q.options
+      }
+    }
+  }
+  return out
 }

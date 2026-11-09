@@ -231,6 +231,34 @@ API** and **Google Drive API** enabled, as `GOOGLE_CLIENT_ID` /
 already made one — same project, same client. The Drive scope is `drive.file`,
 which can only touch files this tool itself created.
 
+### Getting the answers back
+
+A Google Form's answers land in a Google Sheet, and that is where this route
+used to end: somebody retyped fourteen answers into the console. **Paste the
+answers back in**, at the bottom of the questionnaire screen, is the other half
+of it.
+
+Copy whatever came out of the sheet and paste it. Three shapes are accepted,
+because there are three obvious ways to copy a response and nobody should have
+to know which one the tool wanted:
+
+- the sheet's header row and its response rows, tabbed — more than one row is
+  normal, and the newest wins;
+- one `question<TAB>answer` per line, from a transposed sheet;
+- the question on one line and its answer underneath, as the form's own
+  "individual response" view prints it.
+
+Headings are matched against every wording a question has ever carried — the
+console's, the client-facing one, and the per-business-type variants — so a
+form built from `questionnaire-text` and a form built by hand from the console
+both import. A heading that only nearly matches is flagged as such rather than
+accepted quietly.
+
+**Reading never writes.** The first press shows what was found, labelled `New`,
+`Replaces`, `Unchanged` or `No match`, with every value editable. The second
+press writes what is on screen, not what was parsed — so a mis-match costs a
+correction rather than an overwritten answer.
+
 ### What both of them change
 
 The client-facing wording lives in `src/onboard/client-questionnaire.ts`, shared
@@ -243,9 +271,12 @@ disagree about what was asked.
   their website" talks about the reader rather than to them.
 - **`resolves` is dropped.** "Unblocks 8 recommendations" is what makes an
   operator bother to ask; to the business it is noise about someone else's tool.
-- **Answered questions are left out of a Google Form only.** The Forms API
-  cannot seed an answer, so including them would mean the client retyping what
-  you already know. The hosted page has no such limit and shows them filled in.
+- **Every question goes in, answered or not.** Answered ones used to be left
+  out of a Google Form, because the API cannot seed an answer and a blank reply
+  would have been indistinguishable from "it changed". The importer settled
+  that: an answer that comes back changed is shown against the one on file and
+  labelled as replacing it. The hosted page goes further and puts the existing
+  answer in the box.
 
 The keys and the answer types are untouched either way, so an answer typed by a
 business owner and one typed by an operator are the same row in the same table
