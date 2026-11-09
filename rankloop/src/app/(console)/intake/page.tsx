@@ -9,8 +9,10 @@ import { NoClient } from '../_components/no-client'
 import { PageHeader, Stat } from '../_components/ui'
 import { IntakeForm } from './form'
 import { GoogleFormPanel } from './google-form'
+import { ShareLinkPanel } from './share-link'
 import { formsConfigured } from '@/engines/google-forms'
 import { pendingQuestionCount } from '@/onboard/questionnaire-form'
+import { isLocalOnly, publicBaseUrl, questionnairePath } from '@/onboard/questionnaire-link'
 
 export const dynamic = 'force-dynamic'
 
@@ -53,10 +55,18 @@ export default async function IntakePage() {
       url: schema.clients.questionnaireFormUrl,
       editUrl: schema.clients.questionnaireFormEditUrl,
       madeAt: schema.clients.questionnaireFormAt,
+      token: schema.clients.questionnaireToken,
+      tokenAt: schema.clients.questionnaireTokenAt,
+      answeredAt: schema.clients.questionnaireAnsweredAt,
     })
     .from(schema.clients)
     .where(eq(schema.clients.id, client.id))
     .get()
+
+  // Built on the server so the panel can say plainly that a localhost link is
+  // one only the operator can open, rather than hand over a dead end.
+  const baseUrl = await publicBaseUrl()
+  const hostedUrl = formRow?.token ? `${baseUrl}${questionnairePath(formRow.token)}` : null
 
   const existingForm = formRow?.url
     ? {
@@ -109,6 +119,16 @@ export default async function IntakePage() {
           </div>
         </div>
       )}
+
+      <ShareLinkPanel
+        clientId={client.id}
+        clientName={client.name}
+        url={hostedUrl}
+        madeAt={formRow?.tokenAt ? formRow.tokenAt.toLocaleDateString() : null}
+        answeredAt={formRow?.answeredAt ? formRow.answeredAt.toLocaleDateString() : null}
+        localOnly={isLocalOnly(baseUrl)}
+        baseUrl={baseUrl}
+      />
 
       <GoogleFormPanel
         clientId={client.id}

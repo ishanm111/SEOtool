@@ -4,6 +4,7 @@ import { useActionState, useState } from 'react'
 import { useFormStatus } from 'react-dom'
 import { makeGoogleFormAction } from '../_actions/questionnaire-form'
 import { emptyFormState } from '../_actions/questionnaire-form-state'
+import { CopyLink } from '../_components/copy-link'
 
 /**
  * Making the questionnaire into something the client can fill in themselves.
@@ -19,30 +20,6 @@ function Submit({ idle, busy }: { idle: string; busy: string }) {
     <button type="submit" className="btn btn-primary" disabled={pending}>
       {pending && <span className="h-1.5 w-1.5 rounded-full bg-current live-dot" aria-hidden />}
       {pending ? busy : idle}
-    </button>
-  )
-}
-
-function CopyLink({ url }: { url: string }) {
-  const [copied, setCopied] = useState(false)
-
-  return (
-    <button
-      type="button"
-      className="btn"
-      onClick={async () => {
-        try {
-          await navigator.clipboard.writeText(url)
-          setCopied(true)
-          setTimeout(() => setCopied(false), 2000)
-        } catch {
-          // Clipboard access is refused in some browsers and over plain http on
-          // anything but localhost. The link is on screen either way.
-          setCopied(false)
-        }
-      }}
-    >
-      {copied ? 'Copied' : 'Copy link'}
     </button>
   )
 }

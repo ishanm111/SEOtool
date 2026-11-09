@@ -171,9 +171,40 @@ Two properties the code holds to, both worth keeping if this is extended:
 
 The questionnaire is the slowest part of onboarding: the answers are the only
 thing between a list of blocked recommendations and a publishable one, and they
-live in a conversation that has to be had. **Make into Google Form** on the
-questionnaire screen turns the unanswered questions into a form the business can
-fill in on their phone, and hands back a link to send them.
+live in a conversation that has to be had. There are two ways to hand it to the
+business instead.
+
+### A link the tool hosts itself
+
+**Make a link** on the questionnaire screen issues a URL — `/q/<token>` — that
+opens the questionnaire with no sign-in and no Google account anywhere in it.
+This is the shorter path and the better one:
+
+- **Answers write straight into `client_facts`**, the table the recommender
+  reads. A Google Form puts them in a spreadsheet somebody has to copy back out.
+- **Every box starts with what is already on file**, which the Forms API cannot
+  do. So a business owner can correct the opening hours instead of guessing what
+  you have, and clearing a box unambiguously means "take that off".
+- **Nothing to set up.** No Cloud project, no OAuth client, no refresh token.
+
+The token is the whole of the authorisation — the same trust model as a Google
+Form link — so it is 18 random bytes and unique, never derived from the client
+id. **Replace it** issues a new one and the old link stops resolving in the same
+statement, which is the only thing to be done about a link sent to the wrong
+number. The page is `noindex`, because a crawled one would publish a business's
+answers to anyone who searched.
+
+The one requirement is that the tool be reachable from the client's phone. On a
+laptop it is not, and the panel says so rather than handing over a dead link.
+Put the app behind a tunnel or a real domain and set `PUBLIC_BASE_URL` in
+`.env.local` to that address — the client portal needs exactly the same thing,
+so it is one job and not two.
+
+### A Google Form
+
+**Make into Google Form** turns the unanswered questions into a Google Form and
+hands back a link. Worth it only if the business already lives in Google
+Workspace and would rather the answers landed there.
 
 ```bash
 npm run forms-auth                      # one-time Google authorisation
@@ -186,17 +217,25 @@ API** and **Google Drive API** enabled, as `GOOGLE_CLIENT_ID` /
 already made one — same project, same client. The Drive scope is `drive.file`,
 which can only touch files this tool itself created.
 
-Three things differ from the console's version of the same questions:
+### What both of them change
 
-- **Answered questions are left out.** The Forms API cannot seed an answer, so
-  including them would mean the client retyping what you already know — and a
-  blank reply would be indistinguishable from "it changed".
-- **`resolves` is dropped.** "Unblocks 8 recommendations" is what makes an
-  operator bother to ask; to the business it is noise about someone else's tool.
+The client-facing wording lives in `src/onboard/client-questionnaire.ts`, shared
+by both, because the moment each has its own copy of a label they start to
+disagree about what was asked.
+
 - **Operator wording is rewritten.** "What do they most want to be found for?"
   is the right question and the wrong pronoun when the person reading it is the
-  "they". The keys and answer types are untouched, so a form answer and an
-  operator-typed answer are interchangeable.
+  "they", and "a warranty the business does not offer is a legal problem on
+  their website" talks about the reader rather than to them.
+- **`resolves` is dropped.** "Unblocks 8 recommendations" is what makes an
+  operator bother to ask; to the business it is noise about someone else's tool.
+- **Answered questions are left out of a Google Form only.** The Forms API
+  cannot seed an answer, so including them would mean the client retyping what
+  you already know. The hosted page has no such limit and shows them filled in.
+
+The keys and the answer types are untouched either way, so an answer typed by a
+business owner and one typed by an operator are the same row in the same table
+and nothing downstream can tell which it was.
 
 One form per client. Pressing the button again returns the existing link rather
 than making a second form, because two live forms for one business means two

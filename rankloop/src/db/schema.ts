@@ -55,6 +55,21 @@ export const clients = sqliteTable('clients', {
   questionnaireFormEditUrl: text('questionnaire_form_edit_url'),
   questionnaireFormAt: integer('questionnaire_form_at', { mode: 'timestamp' }),
 
+  /**
+   * The tool's own questionnaire link, if one was issued.
+   *
+   * The link is the credential: there is no password on the page it opens, the
+   * same way there is none on a Google Form link, and the token is the only
+   * thing standing between a stranger and one business's answers. So it is
+   * random rather than derived from the client id, and unique, and an operator
+   * can issue a new one — which is what makes a link that went to the wrong
+   * phone number recoverable.
+   */
+  questionnaireToken: text('questionnaire_token'),
+  questionnaireTokenAt: integer('questionnaire_token_at', { mode: 'timestamp' }),
+  /** When the business last submitted the hosted form. Null until they do. */
+  questionnaireAnsweredAt: integer('questionnaire_answered_at', { mode: 'timestamp' }),
+
   isActive: integer('is_active', { mode: 'boolean' }).notNull().default(true),
   createdAt: integer('created_at', { mode: 'timestamp' }).$defaultFn(now),
 })
